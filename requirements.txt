@@ -1,0 +1,7 @@
+flask
+python-dotenv
+requests
+twilio
+hnswlib
+psycopg2-binary
+werkzeug

@@ -1,0 +1,68 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Knowledge Base</h2>
+</div>
+
+<div class="panel">
+  {% if rows %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Content</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="font-weight:600; white-space:nowrap;">{{ r['title'] }}</td>
+        <td style="color:var(--muted); max-width:400px;">{{ r['content'][:160] }}{% if r['content']|length > 160 %}…{% endif %}</td>
+        <td class="small" style="white-space:nowrap;">{{ r['created_at'] }}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-sm secondary" href="{{ url_for('admin.admin_knowledge', edit_id=r['id']) }}">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this knowledge entry?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="action" value="delete" />
+            <input type="hidden" name="doc_id" value="{{ r['id'] }}" />
+            <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">No knowledge entries yet. Add one below.</p>
+  {% endif %}
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>{% if edit_doc %}Edit Entry{% else %}Add Knowledge{% endif %}</h3>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="action" value="{{ 'edit' if edit_doc else 'add' }}" />
+    {% if edit_doc %}
+      <input type="hidden" name="doc_id" value="{{ edit_doc['id'] }}" />
+    {% endif %}
+    <div class="form-group">
+      <label>Title</label>
+      <input class="input" type="text" name="title" value="{{ edit_doc['title'] if edit_doc else '' }}" placeholder="e.g. Spa Services" />
+    </div>
+    <div class="form-group">
+      <label>Content</label>
+      <textarea class="input" name="content" rows="4" placeholder="e.g. The spa is open 9am–7pm. Appointments required.">{{ edit_doc['content'] if edit_doc else '' }}</textarea>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" type="submit">Save</button>
+      {% if edit_doc %}
+        <a class="btn secondary" href="{{ url_for('admin.admin_knowledge') }}">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% endblock %}

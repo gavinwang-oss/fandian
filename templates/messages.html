@@ -1,0 +1,35 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Messages</h2>
+</div>
+
+<div class="messages-list">
+  {% set last_stay = None %}
+  {% for r in rows %}
+    {% if last_stay != r['stay_id'] %}
+      {% if last_stay is not none %}</div></div>{% endif %}
+      <div class="thread">
+        <div class="thread-header">
+          <div>Stay #{{ r['stay_id'] }} · {{ r['guest_phone'] }}</div>
+          <a href="/admin/stay/{{ r['stay_id'] }}">Open thread →</a>
+        </div>
+        <div class="thread-messages">
+      {% set last_stay = r['stay_id'] %}
+    {% endif %}
+    <div class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}">
+      <div>{{ r['body'] }}</div>
+      <div class="meta">{{ r['direction'] }} · {{ r['created_at'] | relative_time }}</div>
+    </div>
+  {% endfor %}
+  {% if rows %}</div></div>{% endif %}
+</div>
+
+{% if not rows %}
+<div class="panel" style="text-align:center; color:var(--muted); padding:48px;">
+  No messages yet.
+</div>
+{% endif %}
+
+{% endblock %}

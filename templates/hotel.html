@@ -1,0 +1,52 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Hotel Info</h2>
+</div>
+
+<div class="panel">
+  {% if rows %}
+    {% for r in rows %}
+    <div class="info-row">
+      <div class="info-row-key">{{ r['key'] | replace('_', ' ') | title }}</div>
+      <div class="info-row-value">{{ r['value'] }}</div>
+      <div class="info-row-actions">
+        <a class="btn btn-sm secondary" href="{{ url_for('admin.admin_hotel', edit_id=r['id']) }}">Edit</a>
+        <form method="post" style="display:inline;" onsubmit="return confirm('Delete this entry?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <input type="hidden" name="action" value="delete" />
+          <input type="hidden" name="info_id" value="{{ r['id'] }}" />
+          <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">No hotel info yet. Add some below.</p>
+  {% endif %}
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>{% if edit_row %}Edit Entry{% else %}Add / Update{% endif %}</h3>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="action" value="upsert" />
+    <div class="form-group">
+      <label>Key</label>
+      <input class="input" type="text" name="key" value="{{ edit_row['key'] if edit_row else '' }}" placeholder="e.g. breakfast_hours" />
+    </div>
+    <div class="form-group">
+      <label>Value</label>
+      <input class="input" type="text" name="value" value="{{ edit_row['value'] if edit_row else '' }}" placeholder="e.g. 6:30 AM – 10:30 AM" />
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" type="submit">Save</button>
+      {% if edit_row %}
+        <a class="btn secondary" href="{{ url_for('admin.admin_hotel') }}">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% endblock %}

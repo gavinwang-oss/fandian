@@ -1,0 +1,54 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Staff Users</h2>
+</div>
+
+<div class="panel">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td style="font-weight:500;">{{ r['email'] }}</td>
+        <td><span class="badge {{ 'normal' if r['role']=='manager' else 'low' }}">{{ r['role']|capitalize }}</span></td>
+        <td><span class="badge {{ 'done' if r['is_active'] else 'open' }}">{{ 'Active' if r['is_active'] else 'Inactive' }}</span></td>
+        <td class="small">{{ r['created_at'] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>Add User</h3>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <div class="form-group">
+      <label>Email</label>
+      <input class="input" type="email" name="email" placeholder="staff@hotel.com" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input class="input" type="password" name="password" placeholder="••••••••" />
+    </div>
+    <div class="form-group">
+      <label>Role</label>
+      <select name="role">
+        <option value="staff">Staff</option>
+        <option value="manager">Manager</option>
+      </select>
+    </div>
+    <button class="btn" type="submit">Create User</button>
+  </form>
+</div>
+
+{% endblock %}

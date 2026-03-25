@@ -1,0 +1,31 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Stay #{{ stay_id }}</h2>
+  <p>{{ guest_phone }}</p>
+</div>
+
+<div class="chat-container">
+  <div class="chat-messages" id="chat-messages">
+    {% for r in rows %}
+      <div id="msg-{{ r['id'] }}" class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}">
+        <div>{{ r['body'] }}</div>
+        <div class="meta">{{ r['direction'] }} · {{ r['created_at'] | relative_time }}</div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="reply-box">
+    <form method="post" action="/admin/stay/{{ stay_id }}/reply">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <textarea name="body" rows="2" placeholder="Type a reply..."></textarea>
+      <button class="btn" type="submit">Send</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  const el = document.getElementById('chat-messages');
+  if (el) { el.scrollTop = el.scrollHeight; }
+</script>
+{% endblock %}

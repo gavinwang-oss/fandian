@@ -1,0 +1,146 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Tasks</h2>
+</div>
+
+{# ── Stat summary ── #}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">Open</div>
+    <div class="stat-value">{{ stats.open }}</div>
+  </div>
+  <div class="stat-card {% if stats.urgent > 0 %}stat-urgent{% endif %}">
+    <div class="stat-label">Urgent / High</div>
+    <div class="stat-value">{{ stats.urgent }}</div>
+  </div>
+  <div class="stat-card {% if stats.unassigned > 0 %}stat-warn{% endif %}">
+    <div class="stat-label">Unassigned</div>
+    <div class="stat-value">{{ stats.unassigned }}</div>
+  </div>
+</div>
+
+{# ── Filters ── #}
+<form class="filters" method="get">
+  <select name="status">
+    <option value="">All statuses</option>
+    <option value="open" {% if status_filter=='open' %}selected{% endif %}>Open</option>
+    <option value="done" {% if status_filter=='done' %}selected{% endif %}>Done</option>
+  </select>
+  <select name="priority">
+    <option value="">All priorities</option>
+    {% for p in ['low','normal','high','urgent'] %}
+      <option value="{{ p }}" {% if priority_filter==p %}selected{% endif %}>{{ p|capitalize }}</option>
+    {% endfor %}
+  </select>
+  <select name="assigned">
+    <option value="">All assignees</option>
+    <option value="me" {% if assigned_filter=='me' %}selected{% endif %}>Assigned to me</option>
+  </select>
+  <button class="btn btn-sm" type="submit">Filter</button>
+</form>
+
+{# ── Task cards — open first, done at bottom with separator ── #}
+{% set open_tasks = rows | selectattr('status', 'ne', 'done') | list %}
+{% set done_tasks = rows | selectattr('status', 'equalto', 'done') | list %}
+
+{% if not rows %}
+  <div class="panel" style="text-align:center; color:var(--muted); padding:48px;">
+    No tasks found.
+  </div>
+{% endif %}
+
+{% if open_tasks %}
+<div class="task-group-header">Open · {{ open_tasks | length }}</div>
+<div class="card-grid" style="margin-bottom: 32px;">
+  {% for r in open_tasks %}
+  {% set is_unassigned = not r['assigned_to_staff_user_id'] %}
+  <div class="task-card priority-{{ r['priority'] }}" data-expandable>
+    <div class="task-card-header">
+      <div class="task-card-title">{{ r['summary'] or r['type'] }}</div>
+      <span class="card-expand">▾</span>
+    </div>
+
+    <div class="task-meta">
+      <span class="badge {{ r['priority'] }}">{{ r['priority']|capitalize }}</span>
+      <span class="badge low">{{ (r['department'] or 'frontdesk')|capitalize }}</span>
+      {% if is_unassigned %}
+        <span class="badge high">⚠ Unassigned</span>
+      {% else %}
+        {% for u in staff_users %}
+          {% if u['id'] == r['assigned_to_staff_user_id'] %}
+            <span class="badge normal">{{ u['email'] }}</span>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="small">
+      Stay <a href="/admin/stay/{{ r['stay_id'] }}">#{{ r['stay_id'] }}</a> · {{ r['created_at'] | relative_time }}
+    </div>
+
+    <div class="task-card-controls">
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="action" value="update" />
+        <input type="hidden" name="task_id" value="{{ r['id'] }}" />
+        <input type="hidden" name="notify_guest_when_done" value="{{ 'on' if r['notify_guest_when_done'] else '' }}" />
+        <div class="control-row">
+          <select name="priority" onchange="this.form.submit()">
+            {% for p in ['low','normal','high','urgent'] %}
+              <option value="{{ p }}" {% if r['priority']==p %}selected{% endif %}>{{ p|capitalize }}</option>
+            {% endfor %}
+          </select>
+          <select name="assigned_to" onchange="this.form.submit()">
+            <option value="">Unassigned</option>
+            {% for u in staff_users %}
+              <option value="{{ u['id'] }}" {% if r['assigned_to_staff_user_id']==u['id'] %}selected{% endif %}>{{ u['email'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="action" value="status" />
+        <input type="hidden" name="task_id" value="{{ r['id'] }}" />
+        <input type="hidden" name="status" value="done" />
+        <button class="btn btn-sm secondary" type="submit">Mark Done</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if done_tasks %}
+<div class="task-group-header">Completed · {{ done_tasks | length }}</div>
+<div class="card-grid">
+  {% for r in done_tasks %}
+  <div class="task-card status-done">
+    <div class="task-card-header">
+      <div class="task-card-title">{{ r['summary'] or r['type'] }}</div>
+      <span class="badge done">Done</span>
+    </div>
+    <div class="task-meta">
+      <span class="badge {{ r['priority'] }}">{{ r['priority']|capitalize }}</span>
+      <span class="badge low">{{ (r['department'] or 'frontdesk')|capitalize }}</span>
+    </div>
+    <div class="small">
+      Stay <a href="/admin/stay/{{ r['stay_id'] }}">#{{ r['stay_id'] }}</a> · {{ r['guest_phone'] }} · {{ r['created_at'] | relative_time }}
+    </div>
+    <div class="task-card-controls">
+      <form method="post" style="display:contents;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="action" value="status" />
+        <input type="hidden" name="task_id" value="{{ r['id'] }}" />
+        <input type="hidden" name="status" value="open" />
+        <button class="btn btn-sm secondary" type="submit">Reopen</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
