@@ -2,26 +2,47 @@
 Seed realistic demo data for a mid-size hotel (100 rooms, ~60% occupancy).
 ~60 guests/night, ~25% text = ~15 conversations/day = ~450/month, ~1,500 messages.
 Run once: python3 seed_demo.py
+Works with both SQLite and Postgres (reads DATABASE_URL from environment).
 """
-import sqlite3
+import os
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
+from dotenv import load_dotenv
 
-DB_PATH = Path(__file__).resolve().parent / "hotel.db"
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{Path(__file__).resolve().parent / 'hotel.db'}")
+IS_POSTGRES = DATABASE_URL.startswith("postgres")
+
+if IS_POSTGRES:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+else:
+    import sqlite3
+    conn = sqlite3.connect(Path(__file__).resolve().parent / "hotel.db")
+    conn.row_factory = sqlite3.Row
+
+cur = conn.cursor()
 HOTEL_ID = 1
 
-conn = sqlite3.connect(DB_PATH)
-conn.row_factory = sqlite3.Row
-cur = conn.cursor()
+def sql(q):
+    if IS_POSTGRES:
+        return q.replace("?", "%s")
+    return q
 
 def ts(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
+def lastrowid():
+    if IS_POSTGRES:
+        return cur.fetchone()["id"]
+    return cur.lastrowid
+
 now = datetime.utcnow()
 
 # ── Conversation templates ───────────────────────────────────────────────────
-# (guest_msg, ai_reply, task_summary, dept, priority, pct_chance_of_task)
 TEMPLATES = [
     # AI-resolved (no task)
     ("What's the wifi password?",
@@ -98,9 +119,6 @@ TEMPLATES = [
     ("I need a crib for my baby",
      "We'll have a crib delivered to your room within 30 minutes.",
      "Crib delivery requested", "housekeeping", "normal", 100),
-    ("Can I get a toothbrush and toothpaste?",
-     "Housekeeping will bring those right up!",
-     "Toothbrush/toothpaste requested", "housekeeping", "low", 100),
     ("Can you remove the dishes from my room?",
      "Of course — someone will come collect them shortly.",
      "Dish pickup requested", "housekeeping", "low", 100),
@@ -121,9 +139,6 @@ TEMPLATES = [
     ("The lights in my room keep flickering",
      "Maintenance has been notified and will be up to check shortly.",
      "Flickering lights in guest room", "maintenance", "normal", 100),
-    ("My room key isn't working",
-     "Please come to the front desk and we'll reprogram your key card right away.",
-     None, None, None, 0),
     ("The toilet is clogged",
      "I'm sorry! Maintenance is being sent up right now.",
      "Clogged toilet in guest room", "maintenance", "urgent", 100),
@@ -132,24 +147,15 @@ TEMPLATES = [
     ("Can I get a late checkout until 1pm?",
      "I've sent your late checkout request to the front desk — we'll confirm availability shortly.",
      "Late checkout request until 1pm", "frontdesk", "normal", 100),
-    ("Can I get a late checkout until 2pm?",
-     "Passing this to the front desk now — we'll confirm shortly.",
-     "Late checkout request until 2pm", "frontdesk", "normal", 100),
     ("I locked myself out of my room",
      "A staff member will be at your room within 5 minutes!",
      "Guest locked out — send staff", "frontdesk", "high", 100),
     ("There's a noise complaint — the room next door is very loud",
      "I'm sorry for the disturbance — security has been notified.",
      "Noise complaint from guest", "frontdesk", "high", 100),
-    ("I have a question about my bill",
-     "I'll have the front desk follow up with you shortly about your billing.",
-     "Guest has billing question", "frontdesk", "normal", 100),
     ("Can I get a wake-up call at 6am?",
      "Wake-up call logged for 6:00 AM. Is there anything else you need?",
      "Wake-up call at 6am", "frontdesk", "low", 100),
-    ("Can I get a wake-up call at 7am?",
-     "Wake-up call logged for 7:00 AM tomorrow morning!",
-     "Wake-up call at 7am", "frontdesk", "low", 100),
 
     # Task-creating (concierge)
     ("Can you book a taxi to the airport at 5am?",
@@ -158,27 +164,20 @@ TEMPLATES = [
     ("Can you book a dinner reservation for 2 at 7pm?",
      "I'll have our concierge check availability and confirm.",
      "Dinner reservation: 2 guests at 7pm", "concierge", "normal", 100),
-    ("Can you recommend and book a tour?",
-     "Our concierge will reach out shortly with some great options.",
-     "Guest wants tour recommendations/booking", "concierge", "low", 100),
     ("I need help with luggage to check out",
      "A bellhop will be at your room shortly to assist!",
      "Luggage assist for checkout", "concierge", "normal", 100),
-    ("Can you get theater tickets for tonight?",
-     "I'll pass this to our concierge right away.",
-     "Theater tickets requested for tonight", "concierge", "normal", 100),
 ]
 
 HOUR_WEIGHTS = [
-    1, 0, 0, 0, 0, 1, 2, 5, 7, 6, 4, 3,   # 12am–11am
-    3, 3, 2, 2, 3, 5, 7, 9, 8, 6, 4, 2    # 12pm–11pm
+    1, 0, 0, 0, 0, 1, 2, 5, 7, 6, 4, 3,
+    3, 3, 2, 2, 3, 5, 7, 9, 8, 6, 4, 2
 ]
 
 def random_hour():
     return random.choices(range(24), weights=HOUR_WEIGHTS)[0]
 
 def random_msg_dt(base_dt):
-    offset_hours = random.uniform(1, 22)
     hour = random_hour()
     return base_dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))
 
@@ -188,7 +187,6 @@ ROOMS = [
     "301","302","303","304","305","306","307","308","309","310",
     "401","402","403","404","405","406","407","408","409","410",
     "501","502","503","504","505","506","507","508","509","510",
-    "601","602","603","604","605","606","607","608","609","610",
 ]
 
 STAFF_REPLIES = [
@@ -197,28 +195,25 @@ STAFF_REPLIES = [
     "We're on it — someone will be there shortly.",
     "All sorted! Feel free to reach out anytime.",
     "Handled! Let us know if there's anything else.",
-    "We've got that covered for you.",
-    "On it right now — thanks for letting us know!",
 ]
 
-print("Seeding demo data — this may take a moment...")
+print("Seeding demo data...")
 
-# Clear any previous seed data for guests with fake phone pattern
-cur.execute("SELECT id FROM guests WHERE phone LIKE '+1555%'")
+# Clear previous demo data
+cur.execute(sql("SELECT id FROM guests WHERE phone LIKE '+1555%'"))
 old_guest_ids = [r["id"] for r in cur.fetchall()]
 if old_guest_ids:
-    placeholders = ",".join("?" * len(old_guest_ids))
+    placeholders = ",".join(["?" if not IS_POSTGRES else "%s"] * len(old_guest_ids))
     cur.execute(f"SELECT id FROM stays WHERE guest_id IN ({placeholders})", old_guest_ids)
     old_stay_ids = [r["id"] for r in cur.fetchall()]
     if old_stay_ids:
-        sp = ",".join("?" * len(old_stay_ids))
+        sp = ",".join(["?" if not IS_POSTGRES else "%s"] * len(old_stay_ids))
         cur.execute(f"DELETE FROM tasks WHERE stay_id IN ({sp})", old_stay_ids)
         cur.execute(f"DELETE FROM messages WHERE stay_id IN ({sp})", old_stay_ids)
         cur.execute(f"DELETE FROM stays WHERE id IN ({sp})", old_stay_ids)
     cur.execute(f"DELETE FROM guests WHERE id IN ({placeholders})", old_guest_ids)
     print(f"Cleared {len(old_guest_ids)} previous demo guests.")
 
-# Generate ~800 stays across 30 days (~27/day)
 NUM_STAYS = 800
 phone_counter = 2000
 guests_created = stays_created = msgs_created = tasks_created = 0
@@ -226,33 +221,38 @@ guests_created = stays_created = msgs_created = tasks_created = 0
 for i in range(NUM_STAYS):
     phone = f"+1555{str(phone_counter + i).zfill(7)}"
 
-    # Create guest
-    cur.execute("INSERT INTO guests (phone, created_at) VALUES (?, ?)",
-                (phone, ts(now - timedelta(days=35))))
-    guest_id = cur.lastrowid
+    if IS_POSTGRES:
+        cur.execute("INSERT INTO guests (phone, created_at) VALUES (%s, %s) RETURNING id",
+                    (phone, ts(now - timedelta(days=35))))
+        guest_id = cur.fetchone()["id"]
+    else:
+        cur.execute("INSERT INTO guests (phone, created_at) VALUES (?, ?)",
+                    (phone, ts(now - timedelta(days=35))))
+        guest_id = cur.lastrowid
     guests_created += 1
 
-    # Spread stays evenly across 30 days with some randomness
     days_ago = random.uniform(0.5, 30)
     stay_dt = now - timedelta(days=days_ago)
-    stay_dt = stay_dt.replace(hour=random.randint(14, 17), minute=random.randint(0, 59))  # check-in around 2-5pm
+    stay_dt = stay_dt.replace(hour=random.randint(14, 17), minute=random.randint(0, 59))
     checkout_dt = stay_dt + timedelta(days=random.randint(1, 6))
     room = random.choice(ROOMS)
 
-    cur.execute(
-        """INSERT INTO stays (guest_id, hotel_id, status, room_number, check_out_date, created_at)
-           VALUES (?, ?, 'active', ?, ?, ?)""",
-        (guest_id, HOTEL_ID, room, ts(checkout_dt), ts(stay_dt))
-    )
-    stay_id = cur.lastrowid
+    if IS_POSTGRES:
+        cur.execute(
+            "INSERT INTO stays (guest_id, hotel_id, status, room_number, check_out_date, created_at) VALUES (%s, %s, 'active', %s, %s, %s) RETURNING id",
+            (guest_id, HOTEL_ID, room, ts(checkout_dt), ts(stay_dt))
+        )
+        stay_id = cur.fetchone()["id"]
+    else:
+        cur.execute(
+            "INSERT INTO stays (guest_id, hotel_id, status, room_number, check_out_date, created_at) VALUES (?, ?, 'active', ?, ?, ?)",
+            (guest_id, HOTEL_ID, room, ts(checkout_dt), ts(stay_dt))
+        )
+        stay_id = cur.lastrowid
     stays_created += 1
 
-    # Each stay sends 2–5 messages across different times
-    # Weight toward AI-only templates (first 18) for realistic resolution rate
-    num_conversations = random.randint(2, 5)
     ai_templates = TEMPLATES[:18]
     task_templates = TEMPLATES[18:]
-    # Pick 2-3 AI-only + 0-2 task-creating per stay
     n_ai = min(random.randint(2, 3), len(ai_templates))
     n_task = min(random.randint(0, 2), len(task_templates))
     used_templates = random.sample(ai_templates, n_ai) + random.sample(task_templates, n_task)
@@ -264,50 +264,55 @@ for i in range(NUM_STAYS):
         if msg_dt > now:
             msg_dt = now - timedelta(minutes=random.randint(5, 60))
 
-        # Guest inbound
-        cur.execute(
-            "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (?, 'inbound', 'guest', ?, ?)",
-            (stay_id, guest_msg, ts(msg_dt))
-        )
-        inbound_id = cur.lastrowid
+        if IS_POSTGRES:
+            cur.execute(
+                "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (%s, 'inbound', 'guest', %s, %s) RETURNING id",
+                (stay_id, guest_msg, ts(msg_dt))
+            )
+            inbound_id = cur.fetchone()["id"]
+        else:
+            cur.execute(
+                "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (?, 'inbound', 'guest', ?, ?)",
+                (stay_id, guest_msg, ts(msg_dt))
+            )
+            inbound_id = cur.lastrowid
         msgs_created += 1
 
-        # AI reply
         if ai_reply:
             ai_dt = msg_dt + timedelta(seconds=random.randint(3, 10))
+            p = "%s" if IS_POSTGRES else "?"
             cur.execute(
-                "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (?, 'outbound', 'ai', ?, ?)",
+                f"INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES ({p}, 'outbound', 'ai', {p}, {p})",
                 (stay_id, ai_reply, ts(ai_dt))
             )
             msgs_created += 1
 
-        # Task
         if task_summary and random.randint(1, 100) <= task_pct:
             task_dt = msg_dt + timedelta(seconds=random.randint(5, 15))
-            resolved = random.random() > 0.15  # 85% resolved
+            resolved = random.random() > 0.15
 
+            p = "%s" if IS_POSTGRES else "?"
             if resolved:
                 resolution_minutes = random.randint(8, 90)
                 completed_dt = task_dt + timedelta(minutes=resolution_minutes)
                 cur.execute(
-                    """INSERT INTO tasks (stay_id, type, status, summary, department, priority,
+                    f"""INSERT INTO tasks (stay_id, type, status, summary, department, priority,
                        created_from_message_id, completed_at, created_at)
-                       VALUES (?, 'guest_request', 'done', ?, ?, ?, ?, ?, ?)""",
+                       VALUES ({p}, 'guest_request', 'done', {p}, {p}, {p}, {p}, {p}, {p})""",
                     (stay_id, task_summary, dept, priority, inbound_id, ts(completed_dt), ts(task_dt))
                 )
-                # Staff reply after completing
                 if random.random() > 0.3:
                     staff_dt = msg_dt + timedelta(minutes=random.randint(2, 30))
                     cur.execute(
-                        "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (?, 'outbound', 'staff', ?, ?)",
+                        f"INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES ({p}, 'outbound', 'staff', {p}, {p})",
                         (stay_id, random.choice(STAFF_REPLIES), ts(staff_dt))
                     )
                     msgs_created += 1
             else:
                 cur.execute(
-                    """INSERT INTO tasks (stay_id, type, status, summary, department, priority,
+                    f"""INSERT INTO tasks (stay_id, type, status, summary, department, priority,
                        created_from_message_id, created_at)
-                       VALUES (?, 'guest_request', 'open', ?, ?, ?, ?, ?)""",
+                       VALUES ({p}, 'guest_request', 'open', {p}, {p}, {p}, {p}, {p})""",
                     (stay_id, task_summary, dept, priority, inbound_id, ts(task_dt))
                 )
             tasks_created += 1
