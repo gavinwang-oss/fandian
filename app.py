@@ -491,6 +491,7 @@ def decide_action_llm(user_message: str, hotel_info: dict, stay_id: int, hotel_i
         return None
 
 
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5000)
