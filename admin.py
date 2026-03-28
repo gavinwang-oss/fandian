@@ -55,7 +55,12 @@ def _relative_time(value) -> str:
             value = datetime.fromisoformat(value)
         except ValueError:
             return str(value)
-    diff = datetime.utcnow() - value
+    if value.tzinfo is not None:
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.utcnow()
+    diff = now - value
     seconds = int(diff.total_seconds())
     if seconds < 60:
         return "just now"

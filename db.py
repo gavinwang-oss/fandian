@@ -451,8 +451,9 @@ def _bootstrap_admin():
 
 
 def _now():
+    from datetime import timezone
     if IS_POSTGRES:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
     return datetime.utcnow().isoformat(timespec="seconds")
 
 
@@ -641,7 +642,8 @@ def log_inbound(guest_id: int, hotel_id: int) -> None:
 
 def is_rate_limited(guest_id: int, hotel_id: int, window_seconds: int, limit: int) -> bool:
     if IS_POSTGRES:
-        since = datetime.utcnow() - timedelta(seconds=window_seconds)
+        from datetime import timezone
+        since = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
         row = _fetchone(
             "SELECT COUNT(1) AS cnt FROM inbound_logs WHERE guest_id = ? AND hotel_id = ? AND created_at >= ?",
             (guest_id, hotel_id, since),
