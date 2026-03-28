@@ -40,6 +40,10 @@ app.config.from_object(Config)
 app.secret_key = app.config["SECRET_KEY"]
 app.register_blueprint(admin_bp)
 
+@app.route("/")
+def index():
+    return redirect(url_for("login"))
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hotel-concierge")
 
