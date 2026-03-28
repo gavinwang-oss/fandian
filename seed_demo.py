@@ -197,6 +197,39 @@ STAFF_REPLIES = [
     "Handled! Let us know if there's anything else.",
 ]
 
+# ── Hotel info & knowledge ────────────────────────────────────────────────────
+HOTEL_INFO = [
+    ("wifi_network", "DemoHotel_Guest"),
+    ("wifi_password", "Welcome2024!"),
+    ("checkout_time", "11:00 AM"),
+    ("checkin_time", "3:00 PM"),
+    ("breakfast_hours", "7:00 AM – 10:30 AM"),
+    ("breakfast_location", "Garden Restaurant, ground floor"),
+    ("pool_hours", "7:00 AM – 10:00 PM"),
+    ("gym_hours", "24 hours"),
+    ("gym_location", "2nd floor"),
+    ("bar_hours", "Sun–Thu until midnight, Fri–Sat until 1 AM"),
+    ("spa_hours", "9:00 AM – 8:00 PM"),
+    ("spa_location", "3rd floor"),
+    ("room_service_hours", "6:00 AM – midnight"),
+    ("parking", "Complimentary self-parking, garage entrance on north side"),
+    ("shuttle", "Complimentary shuttle every hour on the half-hour, 8 AM–10 PM, main entrance"),
+    ("airport_distance", "18 miles, approximately 25 minutes by taxi or rideshare"),
+]
+
+HOTEL_DOCS = [
+    ("WiFi Information", "The hotel WiFi network is DemoHotel_Guest. The password is Welcome2024!. WiFi is complimentary for all guests and available throughout the property including pool and lobby areas."),
+    ("Check-in & Check-out", "Standard check-in time is 3:00 PM. Standard check-out is 11:00 AM. Early check-in and late check-out are available upon request, subject to availability. Please contact the front desk to arrange."),
+    ("Dining", "The Garden Restaurant on the ground floor serves breakfast daily from 7:00–10:30 AM. Room service is available 6 AM to midnight by calling ext. 0 or messaging the concierge. The bar is open until midnight on weekdays and 1 AM on weekends."),
+    ("Pool & Fitness", "Our heated outdoor pool is open 7 AM–10 PM and maintained at 82°F year-round. A hot tub is available during the same hours. The fitness center on the 2nd floor is open 24 hours with towels and water provided."),
+    ("Spa Services", "The hotel spa is located on the 3rd floor and open 9 AM–8 PM daily. Services include massages, facials, and body treatments. Advance booking is recommended — contact the front desk or message us to reserve."),
+    ("Parking & Transportation", "Complimentary self-parking is available for hotel guests in the garage on the north side of the building. Valet parking is also available for $25/night. A complimentary shuttle runs to downtown every hour on the half-hour from 8 AM to 10 PM."),
+    ("Local Recommendations", "Within walking distance: Rosario's Italian (2 min), The Harbor Grill (5 min), Blue Lotus Asian (8 min), CVS pharmacy (3 min). The hotel concierge can arrange restaurant reservations, tours, and transportation."),
+    ("Business Center", "Our business center on the lobby level is open 7 AM–10 PM with printing, scanning, and high-speed WiFi. Private meeting rooms are available — contact the front desk to reserve."),
+    ("Housekeeping", "Rooms are serviced daily between 9 AM and 4 PM. For extra towels, pillows, toiletries, or other requests, message us anytime and we will send someone up. Turndown service is available on request."),
+    ("Pet Policy", "The hotel is pet-friendly. Pets up to 50 lbs are welcome for a $50/night fee. Please notify the front desk upon arrival. Pet beds and bowls are available on request."),
+]
+
 print("Seeding demo data...")
 
 # Clear previous demo data
@@ -213,6 +246,22 @@ if old_guest_ids:
         cur.execute(f"DELETE FROM stays WHERE id IN ({sp})", old_stay_ids)
     cur.execute(f"DELETE FROM guests WHERE id IN ({placeholders})", old_guest_ids)
     print(f"Cleared {len(old_guest_ids)} previous demo guests.")
+
+# Seed hotel info
+p = "%s" if IS_POSTGRES else "?"
+for key, value in HOTEL_INFO:
+    cur.execute(f"SELECT id FROM hotel_info WHERE hotel_id = {p} AND key = {p}", (HOTEL_ID, key))
+    if not cur.fetchone():
+        cur.execute(f"INSERT INTO hotel_info (hotel_id, key, value) VALUES ({p}, {p}, {p})", (HOTEL_ID, key, value))
+
+# Seed hotel knowledge docs
+cur.execute(f"DELETE FROM hotel_docs WHERE hotel_id = {p}", (HOTEL_ID,))
+for title, content in HOTEL_DOCS:
+    cur.execute(
+        f"INSERT INTO hotel_docs (hotel_id, title, content) VALUES ({p}, {p}, {p})",
+        (HOTEL_ID, title, content)
+    )
+print(f"Seeded {len(HOTEL_INFO)} hotel info entries and {len(HOTEL_DOCS)} knowledge docs.")
 
 NUM_STAYS = 800
 phone_counter = 2000

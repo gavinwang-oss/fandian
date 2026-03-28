@@ -1014,7 +1014,27 @@ def update_knowledge_suggestion_status(suggestion_id: int, status: str) -> None:
 
 def get_analytics(hotel_id: int, days: int = 30) -> dict:
     """Return analytics data for a hotel over the last N days."""
-    since = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    from datetime import timezone
+    since_dt = datetime.now(timezone.utc) - timedelta(days=days)
+    since = since_dt if IS_POSTGRES else since_dt.strftime("%Y-%m-%d")
+
+    # helper: minutes between two timestamp columns
+    def _min_diff(a, b):
+        if IS_POSTGRES:
+            return f"EXTRACT(EPOCH FROM ({a} - {b})) / 60"
+        return f"(julianday({a}) - julianday({b})) * 1440"
+
+    # helper: extract hour from timestamp
+    def _hour(col):
+        if IS_POSTGRES:
+            return f"EXTRACT(HOUR FROM {col})::int"
+        return f"strftime('%H', {col})"
+
+    # helper: extract date string from timestamp
+    def _date(col):
+        if IS_POSTGRES:
+            return f"TO_CHAR({col}, 'YYYY-MM-DD')"
+        return f"strftime('%Y-%m-%d', {col})"
 
     # Total inbound guest messages
     row = _fetchone(
@@ -1027,9 +1047,9 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
     )
     total_inbound = int(row["cnt"]) if row else 0
 
-    # Inbound messages that got an AI reply (no task created within 2 min of that message)
+    # Inbound messages that got an AI reply within 2 min (no task created)
     row = _fetchone(
-        """
+        f"""
         SELECT COUNT(*) AS cnt FROM messages m
         JOIN stays s ON s.id = m.stay_id
         WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
@@ -1037,13 +1057,13 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
             SELECT 1 FROM messages r
             WHERE r.stay_id = m.stay_id AND r.source = 'ai'
             AND r.created_at > m.created_at
-            AND (julianday(r.created_at) - julianday(m.created_at)) * 1440 < 2
+            AND {_min_diff('r.created_at', 'm.created_at')} < 2
         )
         AND NOT EXISTS (
             SELECT 1 FROM tasks t
             WHERE t.stay_id = m.stay_id
             AND t.created_at >= m.created_at
-            AND (julianday(t.created_at) - julianday(m.created_at)) * 1440 < 2
+            AND {_min_diff('t.created_at', 'm.created_at')} < 2
         )
         """,
         (hotel_id, since),
@@ -1061,10 +1081,10 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
     )
     tasks_created = int(row["cnt"]) if row else 0
 
-    # Avg task resolution time in minutes (done tasks only)
+    # Avg task resolution time in minutes
     row = _fetchone(
-        """
-        SELECT AVG((julianday(t.completed_at) - julianday(t.created_at)) * 1440) AS avg_min
+        f"""
+        SELECT AVG({_min_diff('t.completed_at', 't.created_at')}) AS avg_min
         FROM tasks t JOIN stays s ON s.id = t.stay_id
         WHERE s.hotel_id = ? AND t.status = 'done'
         AND t.completed_at IS NOT NULL AND t.created_at >= ?
@@ -1073,12 +1093,10 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
     )
     avg_resolution_min = round(row["avg_min"]) if row and row["avg_min"] else None
 
-    # Avg staff reply time: for each staff reply, find the most recent guest
-    # message before it in the same stay (within 2 hours). This avoids
-    # double-counting follow-up questions.
+    # Avg staff reply time
     row = _fetchone(
-        """
-        SELECT AVG((julianday(r.created_at) - julianday(m.created_at)) * 1440) AS avg_min
+        f"""
+        SELECT AVG({_min_diff('r.created_at', 'm.created_at')}) AS avg_min
         FROM messages r
         JOIN stays s ON s.id = r.stay_id
         JOIN messages m ON m.id = (
@@ -1086,7 +1104,7 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
             WHERE m2.stay_id = r.stay_id
             AND m2.source = 'guest'
             AND m2.created_at < r.created_at
-            AND (julianday(r.created_at) - julianday(m2.created_at)) * 1440 <= 120
+            AND {_min_diff('r.created_at', 'm2.created_at')} <= 120
         )
         WHERE r.source = 'staff' AND s.hotel_id = ? AND r.created_at >= ?
         """,
@@ -1108,9 +1126,9 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
 
     # Avg resolution time by department
     dept_time_rows = _fetchall(
-        """
+        f"""
         SELECT t.department,
-               AVG((julianday(t.completed_at) - julianday(t.created_at)) * 1440) AS avg_min
+               AVG({_min_diff('t.completed_at', 't.created_at')}) AS avg_min
         FROM tasks t JOIN stays s ON s.id = t.stay_id
         WHERE s.hotel_id = ? AND t.status = 'done'
         AND t.completed_at IS NOT NULL AND t.created_at >= ?
@@ -1125,8 +1143,8 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
 
     # Peak hours (0-23)
     hour_rows = _fetchall(
-        """
-        SELECT strftime('%H', m.created_at) AS hr, COUNT(*) AS cnt
+        f"""
+        SELECT {_hour('m.created_at')} AS hr, COUNT(*) AS cnt
         FROM messages m JOIN stays s ON s.id = m.stay_id
         WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
         GROUP BY hr ORDER BY hr
@@ -1136,10 +1154,10 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
     peak_hours = {int(r["hr"]): int(r["cnt"]) for r in hour_rows}
     peak_hours_list = [peak_hours.get(h, 0) for h in range(24)]
 
-    # Daily volume for trend (last 30 days)
+    # Daily volume for trend
     daily_rows = _fetchall(
-        """
-        SELECT strftime('%Y-%m-%d', m.created_at) AS day, COUNT(*) AS cnt
+        f"""
+        SELECT {_date('m.created_at')} AS day, COUNT(*) AS cnt
         FROM messages m JOIN stays s ON s.id = m.stay_id
         WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
         GROUP BY day ORDER BY day
