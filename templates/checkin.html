@@ -2,8 +2,8 @@
 {% block content %}
 
 <div class="page-header">
-  <h2>New Guest Check-in</h2>
-  <p>A welcome text is sent automatically once you submit.</p>
+  <h2>{{ t['checkin_heading'] }}</h2>
+  <p>{{ t['checkin_subtitle'] }}</p>
 </div>
 
 {% if error %}
@@ -15,29 +15,29 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
 
     <div class="field">
-      <label class="field-label">Phone number</label>
+      <label class="field-label">{{ t['checkin_phone_label'] }}</label>
       <input class="input" type="tel" name="phone"
-             placeholder="415 555 0100  ·  +44 7911 123456"
+             placeholder="{{ t['checkin_phone_placeholder'] }}"
              autofocus autocomplete="off" />
-      <div class="field-hint">US: any format &nbsp;·&nbsp; International: include + and country code</div>
+      <div class="field-hint">{{ t['checkin_phone_hint'] }}</div>
     </div>
 
     <div class="field">
-      <label class="field-label">Room number</label>
-      <input class="input" type="text" name="room_number" placeholder="e.g. 412" />
+      <label class="field-label">{{ t['checkin_room_label'] }}</label>
+      <input class="input" type="text" name="room_number" placeholder="{{ t['checkin_room_placeholder'] }}" />
     </div>
 
     <div class="field">
-      <label class="field-label">Checkout</label>
+      <label class="field-label">{{ t['checkin_checkout_label'] }}</label>
       <div style="display:flex; gap:10px;">
         <input class="input" type="date" name="check_out_date_part" style="flex:1;" />
         <input class="input" type="time" name="check_out_time_part" step="300" style="width:130px;" />
       </div>
-      <div class="field-hint">Triggers a reminder the evening before and a feedback message after checkout</div>
+      <div class="field-hint">{{ t['checkin_checkout_hint'] }}</div>
     </div>
 
     <div style="padding-top: 4px;">
-      <button class="btn checkin-submit" type="submit">Check in &amp; send welcome</button>
+      <button class="btn checkin-submit" type="submit">{{ t['checkin_btn_submit'] }}</button>
     </div>
 
   </form>

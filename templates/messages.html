@@ -8,9 +8,15 @@
   <!-- LEFT: inbox list -->
   <div class="inbox-panel">
     <div class="inbox-header">
-      <h2>Messages</h2>
+      <h2>{{ t['messages_heading'] }}</h2>
       <div class="inbox-userbar">
-        {{ session.get('email','') }} · <a href="/logout">Logout</a>
+        {{ session.get('email','') }} · <a href="/logout">{{ t['nav_logout'] }}</a>
+        &nbsp;·&nbsp;
+        <form method="post" action="/set-language" style="display:inline;">
+          <input type="hidden" name="lang" value="{{ 'en' if current_lang == 'zh' else 'zh' }}" />
+          <input type="hidden" name="next" value="{{ request.path }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}" />
+          <button type="submit" class="lang-toggle-btn" title="{{ t['lang_toggle_title'] }}">{{ t['lang_toggle'] }}</button>
+        </form>
       </div>
     </div>
 
@@ -34,7 +40,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <div class="inbox-empty">No messages yet.</div>
+    <div class="inbox-empty">{{ t['messages_empty'] }}</div>
     {% endif %}
   </div>
 
@@ -54,7 +60,7 @@
             <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
             <input type="text" name="room_number" value="{{ thread_room_number or '' }}"
                    placeholder="Room #" class="thread-meta-input" />
-            <button type="submit" class="thread-meta-btn">Set</button>
+            <button type="submit" class="thread-meta-btn">{{ t['btn_set'] }}</button>
           </form>
           <form method="post" action="/admin/stay/{{ active_stay_id }}" class="thread-meta-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
@@ -66,29 +72,29 @@
             <input type="time" name="check_out_time_part" step="300"
                    value="{{ (thread_check_out_date or '')[11:16] }}"
                    class="thread-meta-input" style="width:90px;" />
-            <button type="submit" class="thread-meta-btn">Set</button>
+            <button type="submit" class="thread-meta-btn">{{ t['btn_set'] }}</button>
           </form>
         </div>
       </div>
       {% if thread_tasks %}
       <div class="thread-task-chips">
-        {% for t in thread_tasks if t['status'] != 'done' %}
-        <span class="task-chip status-open priority-{{ t['priority'] }}" title="{{ t['summary'] or 'Untitled task' }}">
-          <span class="task-chip-label">⚑ {{ (t['summary'] or 'Untitled task') | truncate(40) }}</span>
+        {% for t_item in thread_tasks if t_item['status'] != 'done' %}
+        <span class="task-chip status-open priority-{{ t_item['priority'] }}" title="{{ t_item['summary'] or 'Untitled task' }}">
+          <span class="task-chip-label">⚑ {{ (t_item['summary'] or 'Untitled task') | truncate(40) }}</span>
           <form method="post" action="/admin/tasks" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="hidden" name="action" value="status" />
-            <input type="hidden" name="task_id" value="{{ t['id'] }}" />
+            <input type="hidden" name="task_id" value="{{ t_item['id'] }}" />
             <input type="hidden" name="status" value="done" />
             <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
-            <button type="submit" class="task-chip-done-btn" title="Mark done">✓</button>
+            <button type="submit" class="task-chip-done-btn" title="{{ t['btn_mark_done'] }}">✓</button>
           </form>
         </span>
         {% endfor %}
         {% set done_count = thread_tasks | selectattr('status', 'equalto', 'done') | list | length %}
         {% if done_count %}
         <a href="/admin/tasks" class="task-chip status-done">
-          ✓ {{ done_count }} completed
+          ✓ {{ done_count }} {{ t['messages_completed'] }}
         </a>
         {% endif %}
       </div>
@@ -108,14 +114,14 @@
       <form method="post" action="/admin/stay/{{ active_stay_id }}/reply">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
         <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
-        <textarea name="body" rows="2" placeholder="Type a reply..."></textarea>
-        <button class="btn" type="submit">Send</button>
+        <textarea name="body" rows="2" placeholder="{{ t['messages_reply_placeholder'] }}"></textarea>
+        <button class="btn" type="submit">{{ t['btn_send'] }}</button>
       </form>
     </div>
 
     {% else %}
     <div class="thread-empty">
-      <p>Select a conversation to view messages</p>
+      <p>{{ t['messages_select'] }}</p>
     </div>
     {% endif %}
   </div>

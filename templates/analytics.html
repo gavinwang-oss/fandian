@@ -2,8 +2,8 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h2>Analytics</h2>
-    <p class="page-subtitle">Last {{ days }} days</p>
+    <h2>{{ t['analytics_heading'] }}</h2>
+    <p class="page-subtitle">{{ t['analytics_last_days'].replace('{days}', days|string) }}</p>
   </div>
   <div style="display:flex;gap:8px;">
     <a href="?days=7"  class="btn-outline {% if days==7  %}active{% endif %}">7d</a>
@@ -15,11 +15,11 @@
 {# ── Top stat cards ── #}
 <div class="analytics-grid">
   <div class="stat-card">
-    <div class="stat-label">Guest Messages</div>
+    <div class="stat-label">{{ t['analytics_guest_messages'] }}</div>
     <div class="stat-value">{{ data.total_inbound }}</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">AI Resolved</div>
+    <div class="stat-label">{{ t['analytics_ai_resolved'] }}</div>
     <div class="stat-value">{{ data.ai_replies }}
       <span class="stat-pct {% if data.ai_rate >= 70 %}good{% elif data.ai_rate >= 40 %}ok{% else %}warn{% endif %}">
         {{ data.ai_rate }}%
@@ -27,46 +27,46 @@
     </div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Tasks Created</div>
+    <div class="stat-label">{{ t['analytics_tasks_created'] }}</div>
     <div class="stat-value">{{ data.tasks_created }}</div>
   </div>
   <div class="stat-card highlight">
-    <div class="stat-label">Est. Staff Hours Saved</div>
+    <div class="stat-label">{{ t['analytics_hours_saved'] }}</div>
     <div class="stat-value">{{ data.hours_saved }}h</div>
-    <div class="stat-hint">est. based on 4 min avg staff interaction</div>
+    <div class="stat-hint">{{ t['analytics_hours_saved_hint'] }}</div>
   </div>
 </div>
 
 {# ── Response times ── #}
 <div class="analytics-row">
   <div class="panel" style="flex:1">
-    <div class="panel-title">Response Times</div>
+    <div class="panel-title">{{ t['analytics_response_times'] }}</div>
     <table class="info-table">
       <tr>
-        <td>AI response time</td>
-        <td><strong>~instant</strong> <span class="badge-green">✓</span></td>
+        <td>{{ t['analytics_ai_response'] }}</td>
+        <td><strong>{{ t['analytics_ai_instant'] }}</strong> <span class="badge-green">✓</span></td>
       </tr>
       <tr>
-        <td>Avg staff reply time</td>
+        <td>{{ t['analytics_avg_staff_reply'] }}</td>
         <td>
           {% if data.avg_staff_reply_min is not none %}
             {% set h = (data.avg_staff_reply_min // 60)|int %}
             {% set m = (data.avg_staff_reply_min % 60)|int %}
             <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
           {% else %}
-            <span class="muted">No data yet</span>
+            <span class="muted">{{ t['analytics_no_data'] }}</span>
           {% endif %}
         </td>
       </tr>
       <tr>
-        <td>Avg task resolution time</td>
+        <td>{{ t['analytics_avg_resolution'] }}</td>
         <td>
           {% if data.avg_resolution_min is not none %}
             {% set h = (data.avg_resolution_min // 60)|int %}
             {% set m = (data.avg_resolution_min % 60)|int %}
             <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
           {% else %}
-            <span class="muted">No data yet</span>
+            <span class="muted">{{ t['analytics_no_data'] }}</span>
           {% endif %}
         </td>
       </tr>
@@ -74,7 +74,7 @@
   </div>
 
   <div class="panel" style="flex:1">
-    <div class="panel-title">By Department</div>
+    <div class="panel-title">{{ t['analytics_by_dept'] }}</div>
     <div style="margin-top:16px;">
     {% if data.dept_breakdown %}
       {% set total_tasks = data.dept_breakdown | sum(attribute='count') %}
@@ -88,7 +88,7 @@
         </div>
       {% endfor %}
     {% else %}
-      <p class="muted">No tasks yet.</p>
+      <p class="muted">{{ t['analytics_no_tasks'] }}</p>
     {% endif %}
     </div>
   </div>
@@ -96,7 +96,7 @@
 
 {# ── Peak hours chart ── #}
 <div class="panel">
-  <div class="panel-title">Peak Request Hours</div>
+  <div class="panel-title">{{ t['analytics_peak_hours'] }}</div>
   <canvas id="peakChart" height="80"></canvas>
 </div>
 
@@ -104,11 +104,10 @@
 {% if data.ai_replies > 0 %}
 <div class="panel roi-panel">
   <div class="roi-headline">
-    Your AI handled <strong>{{ data.ai_replies }} requests</strong> in the last {{ days }} days.
+    {{ t['analytics_roi_headline'].replace('{count}', data.ai_replies|string).replace('{days}', days|string) | safe }}
   </div>
   <div class="roi-sub">
-    That's an estimated <strong>{{ data.hours_saved }} hours</strong> of front-desk time saved —
-    roughly <strong>${{ (data.hours_saved * 18) | int }}</strong> in labor value at $18/hr.
+    {{ t['analytics_roi_sub'].replace('{hours}', data.hours_saved|string).replace('{value}', (data.hours_saved * 18)|int|string) | safe }}
   </div>
 </div>
 {% endif %}

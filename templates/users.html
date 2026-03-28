@@ -2,17 +2,17 @@
 {% block content %}
 
 <div class="page-header">
-  <h2>Staff Users</h2>
+  <h2>{{ t['users_heading'] }}</h2>
 </div>
 
 <div class="panel">
   <table class="table">
     <thead>
       <tr>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Status</th>
-        <th>Created</th>
+        <th>{{ t['users_table_email'] }}</th>
+        <th>{{ t['users_table_role'] }}</th>
+        <th>{{ t['users_table_status'] }}</th>
+        <th>{{ t['users_table_created'] }}</th>
       </tr>
     </thead>
     <tbody>
@@ -20,7 +20,7 @@
       <tr>
         <td style="font-weight:500;">{{ r['email'] }}</td>
         <td><span class="badge {{ 'normal' if r['role']=='manager' else 'low' }}">{{ r['role']|capitalize }}</span></td>
-        <td><span class="badge {{ 'done' if r['is_active'] else 'open' }}">{{ 'Active' if r['is_active'] else 'Inactive' }}</span></td>
+        <td><span class="badge {{ 'done' if r['is_active'] else 'open' }}">{{ t['users_status_active'] if r['is_active'] else t['users_status_inactive'] }}</span></td>
         <td class="small">{{ r['created_at'] }}</td>
       </tr>
       {% endfor %}
@@ -29,25 +29,25 @@
 </div>
 
 <div class="panel" style="margin-top:20px;">
-  <h3>Add User</h3>
+  <h3>{{ t['users_add_heading'] }}</h3>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     <div class="form-group">
-      <label>Email</label>
-      <input class="input" type="email" name="email" placeholder="staff@hotel.com" />
+      <label>{{ t['label_email'] }}</label>
+      <input class="input" type="email" name="email" placeholder="{{ t['users_email_placeholder'] }}" />
     </div>
     <div class="form-group">
-      <label>Password</label>
+      <label>{{ t['label_password'] }}</label>
       <input class="input" type="password" name="password" placeholder="••••••••" />
     </div>
     <div class="form-group">
-      <label>Role</label>
+      <label>{{ t['label_role'] }}</label>
       <select name="role">
-        <option value="staff">Staff</option>
-        <option value="manager">Manager</option>
+        <option value="staff">{{ t['users_role_staff'] }}</option>
+        <option value="manager">{{ t['users_role_manager'] }}</option>
       </select>
     </div>
-    <button class="btn" type="submit">Create User</button>
+    <button class="btn" type="submit">{{ t['btn_create_user'] }}</button>
   </form>
 </div>
 

@@ -2,21 +2,21 @@
 {% block content %}
 
 <div class="page-header">
-  <h2>Tasks</h2>
+  <h2>{{ t['tasks_heading'] }}</h2>
 </div>
 
 {# ── Stat summary ── #}
 <div class="stat-grid">
   <div class="stat-card">
-    <div class="stat-label">Open</div>
+    <div class="stat-label">{{ t['tasks_stat_open'] }}</div>
     <div class="stat-value">{{ stats.open }}</div>
   </div>
   <div class="stat-card {% if stats.urgent > 0 %}stat-urgent{% endif %}">
-    <div class="stat-label">Urgent / High</div>
+    <div class="stat-label">{{ t['tasks_stat_urgent'] }}</div>
     <div class="stat-value">{{ stats.urgent }}</div>
   </div>
   <div class="stat-card {% if stats.unassigned > 0 %}stat-warn{% endif %}">
-    <div class="stat-label">Unassigned</div>
+    <div class="stat-label">{{ t['tasks_stat_unassigned'] }}</div>
     <div class="stat-value">{{ stats.unassigned }}</div>
   </div>
 </div>
@@ -24,21 +24,21 @@
 {# ── Filters ── #}
 <form class="filters" method="get">
   <select name="status">
-    <option value="">All statuses</option>
-    <option value="open" {% if status_filter=='open' %}selected{% endif %}>Open</option>
-    <option value="done" {% if status_filter=='done' %}selected{% endif %}>Done</option>
+    <option value="">{{ t['tasks_filter_all_statuses'] }}</option>
+    <option value="open" {% if status_filter=='open' %}selected{% endif %}>{{ t['tasks_filter_open'] }}</option>
+    <option value="done" {% if status_filter=='done' %}selected{% endif %}>{{ t['tasks_filter_done'] }}</option>
   </select>
   <select name="priority">
-    <option value="">All priorities</option>
+    <option value="">{{ t['tasks_filter_all_priorities'] }}</option>
     {% for p in ['low','normal','high','urgent'] %}
       <option value="{{ p }}" {% if priority_filter==p %}selected{% endif %}>{{ p|capitalize }}</option>
     {% endfor %}
   </select>
   <select name="assigned">
-    <option value="">All assignees</option>
-    <option value="me" {% if assigned_filter=='me' %}selected{% endif %}>Assigned to me</option>
+    <option value="">{{ t['tasks_filter_all_assignees'] }}</option>
+    <option value="me" {% if assigned_filter=='me' %}selected{% endif %}>{{ t['tasks_filter_assigned_me'] }}</option>
   </select>
-  <button class="btn btn-sm" type="submit">Filter</button>
+  <button class="btn btn-sm" type="submit">{{ t['btn_filter'] }}</button>
 </form>
 
 {# ── Task cards — open first, done at bottom with separator ── #}
@@ -47,12 +47,12 @@
 
 {% if not rows %}
   <div class="panel" style="text-align:center; color:var(--muted); padding:48px;">
-    No tasks found.
+    {{ t['tasks_no_tasks'] }}
   </div>
 {% endif %}
 
 {% if open_tasks %}
-<div class="task-group-header">Open · {{ open_tasks | length }}</div>
+<div class="task-group-header">{{ t['tasks_group_open'] }} · {{ open_tasks | length }}</div>
 <div class="card-grid" style="margin-bottom: 32px;">
   {% for r in open_tasks %}
   {% set is_unassigned = not r['assigned_to_staff_user_id'] %}
@@ -66,7 +66,7 @@
       <span class="badge {{ r['priority'] }}">{{ r['priority']|capitalize }}</span>
       <span class="badge low">{{ (r['department'] or 'frontdesk')|capitalize }}</span>
       {% if is_unassigned %}
-        <span class="badge high">⚠ Unassigned</span>
+        <span class="badge high">⚠ {{ t['tasks_unassigned'] }}</span>
       {% else %}
         {% for u in staff_users %}
           {% if u['id'] == r['assigned_to_staff_user_id'] %}
@@ -93,7 +93,7 @@
             {% endfor %}
           </select>
           <select name="assigned_to" onchange="this.form.submit()">
-            <option value="">Unassigned</option>
+            <option value="">{{ t['tasks_unassigned'] }}</option>
             {% for u in staff_users %}
               <option value="{{ u['id'] }}" {% if r['assigned_to_staff_user_id']==u['id'] %}selected{% endif %}>{{ u['email'] }}</option>
             {% endfor %}
@@ -106,9 +106,9 @@
           <input type="hidden" name="action" value="status" />
           <input type="hidden" name="task_id" value="{{ r['id'] }}" />
           <input type="hidden" name="status" value="done" />
-          <button class="btn btn-sm secondary" type="submit">Mark Done</button>
+          <button class="btn btn-sm secondary" type="submit">{{ t['btn_mark_done'] }}</button>
         </form>
-        <a class="btn btn-sm" href="/admin/messages?stay={{ r['stay_id'] }}">💬 Message</a>
+        <a class="btn btn-sm" href="/admin/messages?stay={{ r['stay_id'] }}">💬 {{ t['tasks_btn_message'] }}</a>
       </div>
     </div>
   </div>
@@ -117,13 +117,13 @@
 {% endif %}
 
 {% if done_tasks %}
-<div class="task-group-header">Completed · {{ done_tasks | length }}</div>
+<div class="task-group-header">{{ t['tasks_group_completed'] }} · {{ done_tasks | length }}</div>
 <div class="card-grid">
   {% for r in done_tasks %}
   <div class="task-card status-done">
     <div class="task-card-header">
       <div class="task-card-title">{{ r['summary'] or r['type'] }}</div>
-      <span class="badge done">Done</span>
+      <span class="badge done">{{ t['tasks_badge_done'] }}</span>
     </div>
     <div class="task-meta">
       <span class="badge {{ r['priority'] }}">{{ r['priority']|capitalize }}</span>
@@ -138,7 +138,7 @@
         <input type="hidden" name="action" value="status" />
         <input type="hidden" name="task_id" value="{{ r['id'] }}" />
         <input type="hidden" name="status" value="open" />
-        <button class="btn btn-sm secondary" type="submit">Reopen</button>
+        <button class="btn btn-sm secondary" type="submit">{{ t['btn_reopen'] }}</button>
       </form>
     </div>
   </div>

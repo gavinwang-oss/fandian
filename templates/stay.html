@@ -12,14 +12,14 @@
       <input type="hidden" name="action" value="set_room" />
       <input class="input" name="room_number" value="{{ room_number or '' }}"
              placeholder="Room number" style="width:130px; padding:7px 10px;" />
-      <button class="btn btn-sm secondary" type="submit">Set room</button>
+      <button class="btn btn-sm secondary" type="submit">{{ t['stay_set_room'] }}</button>
     </form>
     <form method="post" style="display:flex; gap:8px; align-items:center;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <input type="hidden" name="action" value="set_checkout" />
       <input class="input" type="date" name="check_out_date" value="{{ check_out_date or '' }}"
              style="width:160px; padding:7px 10px;" />
-      <button class="btn btn-sm secondary" type="submit">Set checkout</button>
+      <button class="btn btn-sm secondary" type="submit">{{ t['stay_set_checkout'] }}</button>
     </form>
   </div>
 </div>
@@ -36,8 +36,8 @@
   <div class="reply-box">
     <form method="post" action="/admin/stay/{{ stay_id }}/reply">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-      <textarea name="body" rows="2" placeholder="Type a reply..."></textarea>
-      <button class="btn" type="submit">Send</button>
+      <textarea name="body" rows="2" placeholder="{{ t['stay_reply_placeholder'] }}"></textarea>
+      <button class="btn" type="submit">{{ t['btn_send'] }}</button>
     </form>
   </div>
 </div>

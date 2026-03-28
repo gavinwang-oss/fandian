@@ -6,6 +6,7 @@ from twilio.rest import Client
 
 from auth import login_required, role_required
 from vector_index import invalidate_vector_index
+from translations import get_translations
 from db import (
     list_messages_for_hotel,
     list_conversations_for_hotel,
@@ -45,6 +46,24 @@ from db import (
 from werkzeug.security import generate_password_hash
 
 admin_bp = Blueprint("admin", __name__)
+
+
+@admin_bp.context_processor
+def inject_translations():
+    lang = session.get("lang", "en")
+    return {"t": get_translations(lang), "current_lang": lang}
+
+
+@admin_bp.route("/set-language", methods=["POST"])
+def set_language():
+    lang = request.form.get("lang", "en")
+    if lang not in ("en", "zh"):
+        lang = "en"
+    session["lang"] = lang
+    next_url = request.form.get("next", "")
+    if next_url and next_url.startswith("/admin"):
+        return redirect(next_url)
+    return redirect(url_for("admin.admin_messages"))
 
 
 def _relative_time(value) -> str:

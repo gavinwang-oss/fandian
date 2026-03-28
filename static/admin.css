@@ -104,6 +104,27 @@ a:hover { text-decoration: underline; }
   margin-bottom: 20px;
 }
 
+/* ── Language toggle button ── */
+.lang-toggle-btn {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1.6;
+  transition: background 0.15s, border-color 0.15s;
+  vertical-align: middle;
+}
+.lang-toggle-btn:hover {
+  background: var(--bg);
+  border-color: var(--text);
+}
+
 
 /* ── Buttons ── */
 .btn {
