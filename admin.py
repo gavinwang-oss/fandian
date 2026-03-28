@@ -8,6 +8,7 @@ from auth import login_required, role_required
 from vector_index import invalidate_vector_index
 from db import (
     list_messages_for_hotel,
+    list_conversations_for_hotel,
     list_tasks,
     get_task_stats,
     update_task_status,
@@ -16,6 +17,7 @@ from db import (
     upsert_hotel_info,
     delete_hotel_info,
     list_messages_for_stay,
+    list_tasks_for_stay,
     get_guest_phone_for_stay,
     log_message,
     add_hotel_doc,
@@ -28,6 +30,17 @@ from db import (
     get_task,
     is_opted_out,
     get_guest_id_for_stay,
+    get_stay,
+    set_stay_room_number,
+    set_stay_checkout_date,
+    get_hotel,
+    get_or_create_guest,
+    get_or_create_active_stay,
+    get_hotel_info,
+    mark_welcome_sent,
+    list_knowledge_suggestions,
+    update_knowledge_suggestion_status,
+    get_analytics,
 )
 from werkzeug.security import generate_password_hash
 
@@ -78,10 +91,36 @@ def _require_csrf():
 @login_required
 def admin_messages():
     hotel_id = session.get("hotel_id")
-    rows = list_messages_for_hotel(hotel_id, 200)
+    conversations = list_conversations_for_hotel(hotel_id)
+    active_stay_id = request.args.get("stay", type=int)
+    # auto-select first conversation if none specified
+    if not active_stay_id and conversations:
+        active_stay_id = conversations[0]["stay_id"]
+    thread_rows = []
+    thread_tasks = []
+    thread_room_number = None
+    thread_guest_phone = None
+    csrf_token = _ensure_csrf_token()
+    thread_check_out_date = None
+    if active_stay_id:
+        thread_rows = list_messages_for_stay(hotel_id, active_stay_id)
+        thread_tasks = list_tasks_for_stay(hotel_id, active_stay_id)
+        stay = get_stay(hotel_id, active_stay_id)
+        if stay:
+            thread_room_number = stay["room_number"]
+            thread_check_out_date = stay["check_out_date"]
+        if thread_rows:
+            thread_guest_phone = thread_rows[0]["guest_phone"]
     return render_template(
         "messages.html",
-        rows=rows,
+        conversations=conversations,
+        active_stay_id=active_stay_id,
+        thread_rows=thread_rows,
+        thread_tasks=thread_tasks,
+        thread_room_number=thread_room_number,
+        thread_guest_phone=thread_guest_phone,
+        thread_check_out_date=thread_check_out_date,
+        csrf_token=csrf_token,
         title="Messages",
         active_page="messages",
     )
@@ -103,11 +142,14 @@ def admin_tasks():
             logger.info("task_status_change", extra={"task_id": task_id, "status": status})
 
             task = get_task(task_id)
-            if task and status == "done" and task.get("notify_guest_when_done"):
+            if task and status == "done" and task["notify_guest_when_done"]:
                 to_number = get_guest_phone_for_stay(hotel_id, task["stay_id"])
                 guest_id = get_guest_id_for_stay(hotel_id, task["stay_id"])
                 if to_number and guest_id and not is_opted_out(guest_id, hotel_id):
                     _send_sms(to_number, "Your request has been completed. Let us know if you need anything else.")
+            next_url = request.form.get("next", "")
+            if next_url and next_url.startswith("/admin/"):
+                return redirect(next_url)
             return redirect(url_for("admin.admin_tasks"))
 
         if action == "update":
@@ -143,18 +185,45 @@ def admin_tasks():
     )
 
 
-@admin_bp.route("/admin/stay/<int:stay_id>")
+@admin_bp.route("/admin/stay/<int:stay_id>", methods=["GET", "POST"])
 @login_required
 def admin_stay(stay_id: int):
     hotel_id = session.get("hotel_id")
+
+    if request.method == "POST":
+        _require_csrf()
+        action = request.form.get("action")
+        if action == "set_room":
+            room_number = (request.form.get("room_number") or "").strip()
+            set_stay_room_number(hotel_id, stay_id, room_number or None)
+        elif action == "set_checkout":
+            date_part = (request.form.get("check_out_date_part") or "").strip()
+            time_part = (request.form.get("check_out_time_part") or "").strip()
+            if date_part and time_part:
+                check_out_date = f"{date_part}T{time_part}"
+            elif date_part:
+                check_out_date = date_part
+            else:
+                check_out_date = None
+            set_stay_checkout_date(hotel_id, stay_id, check_out_date)
+        next_url = request.form.get("next", "")
+        if next_url and next_url.startswith("/admin/"):
+            return redirect(next_url)
+        return redirect(url_for("admin.admin_stay", stay_id=stay_id))
+
     rows = list_messages_for_stay(hotel_id, stay_id)
     guest_phone = rows[0]["guest_phone"] if rows else ""
+    stay = get_stay(hotel_id, stay_id)
+    room_number = stay["room_number"] if stay else None
+    check_out_date = stay["check_out_date"] if stay else None
     csrf_token = _ensure_csrf_token()
     return render_template(
         "stay.html",
         rows=rows,
         stay_id=stay_id,
         guest_phone=guest_phone,
+        room_number=room_number,
+        check_out_date=check_out_date,
         csrf_token=csrf_token,
         title=f"Stay #{stay_id}",
         active_page="messages",
@@ -174,14 +243,133 @@ def admin_stay_reply(stay_id: int):
     if guest_id and is_opted_out(guest_id, hotel_id):
         return redirect(url_for("admin.admin_stay", stay_id=stay_id))
 
-    log_message(stay_id, "outbound", body)
+    # Find the last guest (inbound) message to use as the "question"
+    from db import list_messages_for_stay as _list_msgs
+    msgs = _list_msgs(hotel_id, stay_id)
+    guest_question = None
+    for m in reversed(msgs):
+        if m["direction"] == "inbound":
+            guest_question = m["body"]
+            break
+
+    log_message(stay_id, "outbound", body, source="staff")
 
     to_number = get_guest_phone_for_stay(hotel_id, stay_id)
     if to_number:
         _send_sms(to_number, body)
         logger.info("staff_reply_sent", extra={"stay_id": stay_id})
 
+    # Trigger knowledge suggestion in the background (if we have a question)
+    if guest_question:
+        try:
+            from knowledge_suggest import maybe_suggest_knowledge_entry
+            maybe_suggest_knowledge_entry(
+                hotel_id=hotel_id,
+                stay_id=stay_id,
+                guest_question=guest_question,
+                staff_answer=body,
+                app_context=current_app._get_current_object(),
+            )
+        except Exception as exc:
+            logger.warning("knowledge_suggest_init_error", extra={"error": str(exc)})
+
+    next_url = request.form.get("next", "")
+    if next_url and next_url.startswith("/admin/"):
+        return redirect(next_url)
     return redirect(url_for("admin.admin_stay", stay_id=stay_id))
+
+
+@admin_bp.route("/admin/checkin", methods=["GET", "POST"])
+@login_required
+def admin_checkin():
+    hotel_id = session.get("hotel_id")
+    csrf_token = _ensure_csrf_token()
+    error = None
+    success = None
+
+    if request.method == "POST":
+        _require_csrf()
+        raw_phone = (request.form.get("phone") or "").strip()
+        room_number = (request.form.get("room_number") or "").strip()
+        date_part = (request.form.get("check_out_date_part") or "").strip()
+        time_part = (request.form.get("check_out_time_part") or "").strip()
+        if date_part and time_part:
+            check_out_date = f"{date_part}T{time_part}"
+        elif date_part:
+            check_out_date = date_part
+        else:
+            check_out_date = None
+
+        # Normalize phone to E.164 using phonenumbers library
+        phone = None
+        if not raw_phone:
+            error = "Phone number is required."
+        else:
+            try:
+                import phonenumbers
+                parsed = phonenumbers.parse(raw_phone, "US")
+                if phonenumbers.is_valid_number(parsed):
+                    phone = phonenumbers.format_number(
+                        parsed, phonenumbers.PhoneNumberFormat.E164
+                    )
+                else:
+                    error = "Invalid phone number. Check the number and try again."
+            except Exception:
+                error = "Could not parse phone number. For international numbers include the country code (e.g. +44 7911 123456)."
+
+        if not error and not phone:
+            error = "Phone number is required."
+        else:
+            guest_id = get_or_create_guest(phone)
+            stay_id = get_or_create_active_stay(guest_id, hotel_id)
+            if room_number:
+                set_stay_room_number(hotel_id, stay_id, room_number)
+            if check_out_date:
+                set_stay_checkout_date(hotel_id, stay_id, check_out_date)
+
+            # Send welcome SMS
+            hotel = get_hotel(hotel_id)
+            hotel_info = get_hotel_info(hotel_id)
+            hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
+            from_number = hotel["phone_number"] if hotel else ""
+            room_str = f"Room {room_number}" if room_number else "your room"
+            body = (
+                f"Welcome to {hotel_name}! You're all set in {room_str}. "
+                f"Text us anytime — we're here 24/7 for anything you need during your stay."
+            )
+            if from_number:
+                try:
+                    from outreach import _send_sms
+                    from db import log_message as _log_msg
+                    if _send_sms(phone, from_number, body):
+                        _log_msg(stay_id, "outbound", body)
+                        mark_welcome_sent(stay_id)
+                except Exception as exc:
+                    logger.error("checkin_welcome_sms_failed", extra={"error": str(exc)})
+
+            return redirect(url_for("admin.admin_messages") + f"?stay={stay_id}")
+
+    return render_template(
+        "checkin.html",
+        csrf_token=csrf_token,
+        error=error,
+        title="Check In Guest",
+        active_page="checkin",
+    )
+
+
+@admin_bp.route("/admin/rooms")
+@login_required
+@role_required("manager")
+def admin_rooms():
+    hotel_id = session.get("hotel_id")
+    hotel = get_hotel(hotel_id)
+    return render_template(
+        "rooms.html",
+        hotel=hotel,
+        title="Room QR Codes",
+        active_page="rooms",
+    )
 
 
 @admin_bp.route("/admin/hotel", methods=["GET", "POST"])
@@ -191,95 +379,97 @@ def admin_hotel():
     hotel_id = session.get("hotel_id")
     if request.method == "POST":
         _require_csrf()
-        action = request.form.get("action", "upsert")
+        action = request.form.get("action", "upsert_info")
 
-        if action == "delete":
+        # ── Quick Facts ──
+        if action == "delete_info":
             info_id = int(request.form.get("info_id", "0"))
             if info_id:
                 delete_hotel_info(hotel_id, info_id)
-                logger.info("hotel_info_deleted", extra={"info_id": info_id, "hotel_id": hotel_id})
             return redirect(url_for("admin.admin_hotel"))
 
-        # upsert (add or edit)
-        key = request.form.get("key", "").strip()
-        value = request.form.get("value", "").strip()
-        if key and value:
-            upsert_hotel_info(hotel_id, key, value)
-        return redirect(url_for("admin.admin_hotel"))
+        if action == "upsert_info":
+            key = request.form.get("key", "").strip()
+            value = request.form.get("value", "").strip()
+            if key and value:
+                upsert_hotel_info(hotel_id, key, value)
+            return redirect(url_for("admin.admin_hotel"))
 
-    # Pre-fill form if editing an existing entry
-    edit_row = None
-    edit_id = request.args.get("edit_id")
-    if edit_id:
-        rows_all = list_hotel_info(hotel_id)
-        for r in rows_all:
-            if str(r["id"]) == edit_id:
-                edit_row = r
-                break
-
-    rows = list_hotel_info(hotel_id)
-    csrf_token = _ensure_csrf_token()
-    return render_template(
-        "hotel.html",
-        rows=rows,
-        csrf_token=csrf_token,
-        edit_row=edit_row,
-        title="Hotel Info",
-        active_page="hotel",
-    )
-
-
-@admin_bp.route("/admin/knowledge", methods=["GET", "POST"])
-@login_required
-@role_required("manager")
-def admin_knowledge():
-    hotel_id = session.get("hotel_id")
-    if request.method == "POST":
-        _require_csrf()
-        action = request.form.get("action", "add")
-
-        if action == "delete":
+        # ── Knowledge Base ──
+        if action == "delete_doc":
             doc_id = int(request.form.get("doc_id", "0"))
             if doc_id:
                 delete_hotel_doc(hotel_id, doc_id)
                 invalidate_vector_index(hotel_id)
-                logger.info("hotel_doc_deleted", extra={"doc_id": doc_id, "hotel_id": hotel_id})
-            return redirect(url_for("admin.admin_knowledge"))
+            return redirect(url_for("admin.admin_hotel"))
 
-        if action == "edit":
+        if action == "edit_doc":
             doc_id = int(request.form.get("doc_id", "0"))
             title = request.form.get("title", "").strip()
             content = request.form.get("content", "").strip()
             if doc_id and title and content:
                 update_hotel_doc(hotel_id, doc_id, title, content)
                 invalidate_vector_index(hotel_id)
-                logger.info("hotel_doc_updated", extra={"doc_id": doc_id, "hotel_id": hotel_id})
-            return redirect(url_for("admin.admin_knowledge"))
+            return redirect(url_for("admin.admin_hotel"))
 
-        # add new doc
-        title = request.form.get("title", "").strip()
-        content = request.form.get("content", "").strip()
-        if title and content:
-            add_hotel_doc(hotel_id, title, content)
-            invalidate_vector_index(hotel_id)
-        return redirect(url_for("admin.admin_knowledge"))
+        if action == "add_doc":
+            title = request.form.get("title", "").strip()
+            content = request.form.get("content", "").strip()
+            if title and content:
+                add_hotel_doc(hotel_id, title, content)
+                invalidate_vector_index(hotel_id)
+            return redirect(url_for("admin.admin_hotel"))
 
-    # Pre-fill form if editing an existing doc
+        if action == "approve_suggestion":
+            suggestion_id = int(request.form.get("suggestion_id", "0"))
+            title = request.form.get("title", "").strip()
+            content = request.form.get("content", "").strip()
+            if suggestion_id and title and content:
+                add_hotel_doc(hotel_id, title, content)
+                invalidate_vector_index(hotel_id)
+                update_knowledge_suggestion_status(suggestion_id, "approved")
+            return redirect(url_for("admin.admin_hotel"))
+
+        if action == "dismiss_suggestion":
+            suggestion_id = int(request.form.get("suggestion_id", "0"))
+            if suggestion_id:
+                update_knowledge_suggestion_status(suggestion_id, "dismissed")
+            return redirect(url_for("admin.admin_hotel"))
+
+        return redirect(url_for("admin.admin_hotel"))
+
+    # Pre-fill edit forms
+    edit_info_row = None
+    edit_info_id = request.args.get("edit_info_id")
+    if edit_info_id:
+        for r in list_hotel_info(hotel_id):
+            if str(r["id"]) == edit_info_id:
+                edit_info_row = r
+                break
+
     edit_doc = None
-    edit_id = request.args.get("edit_id")
-    if edit_id:
-        edit_doc = get_hotel_doc(hotel_id, int(edit_id))
+    edit_doc_id = request.args.get("edit_doc_id")
+    if edit_doc_id:
+        edit_doc = get_hotel_doc(hotel_id, int(edit_doc_id))
 
-    rows = list_hotel_docs(hotel_id, 200)
     csrf_token = _ensure_csrf_token()
     return render_template(
-        "knowledge.html",
-        rows=rows,
+        "hotel.html",
+        info_rows=list_hotel_info(hotel_id),
+        doc_rows=list_hotel_docs(hotel_id, 200),
+        suggestions=list_knowledge_suggestions(hotel_id, status="pending"),
         csrf_token=csrf_token,
+        edit_info_row=edit_info_row,
         edit_doc=edit_doc,
-        title="Knowledge Base",
-        active_page="knowledge",
+        title="Hotel Info & Knowledge",
+        active_page="hotel",
     )
+
+
+@admin_bp.route("/admin/knowledge")
+@login_required
+def admin_knowledge():
+    return redirect(url_for("admin.admin_hotel"))
 
 
 @admin_bp.route("/admin/users", methods=["GET", "POST"])
@@ -305,6 +495,22 @@ def admin_users():
         csrf_token=csrf_token,
         title="Users",
         active_page="users",
+    )
+
+
+@admin_bp.route("/admin/analytics")
+@login_required
+@role_required("manager")
+def admin_analytics():
+    hotel_id = session.get("hotel_id")
+    days = int(request.args.get("days", 30))
+    data = get_analytics(hotel_id, days=days)
+    return render_template(
+        "analytics.html",
+        data=data,
+        days=days,
+        title="Analytics",
+        active_page="analytics",
     )
 
 

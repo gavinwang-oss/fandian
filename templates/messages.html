@@ -1,35 +1,130 @@
 {% extends "base_admin.html" %}
+{% block content_class %}messages-page{% endblock %}
+{% block userbar %}{% endblock %}
 {% block content %}
 
-<div class="page-header">
-  <h2>Messages</h2>
-</div>
+<div class="messages-layout">
 
-<div class="messages-list">
-  {% set last_stay = None %}
-  {% for r in rows %}
-    {% if last_stay != r['stay_id'] %}
-      {% if last_stay is not none %}</div></div>{% endif %}
-      <div class="thread">
-        <div class="thread-header">
-          <div>Stay #{{ r['stay_id'] }} · {{ r['guest_phone'] }}</div>
-          <a href="/admin/stay/{{ r['stay_id'] }}">Open thread →</a>
-        </div>
-        <div class="thread-messages">
-      {% set last_stay = r['stay_id'] %}
-    {% endif %}
-    <div class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}">
-      <div>{{ r['body'] }}</div>
-      <div class="meta">{{ r['direction'] }} · {{ r['created_at'] | relative_time }}</div>
+  <!-- LEFT: inbox list -->
+  <div class="inbox-panel">
+    <div class="inbox-header">
+      <h2>Messages</h2>
+      <div class="inbox-userbar">
+        {{ session.get('email','') }} · <a href="/logout">Logout</a>
+      </div>
     </div>
-  {% endfor %}
-  {% if rows %}</div></div>{% endif %}
+
+    {% if conversations %}
+    <div class="inbox-list">
+      {% for c in conversations %}
+      <a href="/admin/messages?stay={{ c['stay_id'] }}"
+         class="inbox-row {% if active_stay_id == c['stay_id'] %}active{% endif %}">
+        <div class="inbox-left">
+          <div class="inbox-who">
+            {% if c['room_number'] %}Room {{ c['room_number'] }}{% else %}{{ c['guest_phone'] }}{% endif %}
+            {% if c['top_open_priority'] %}
+              <span class="status-dot priority-{{ c['top_open_priority'] }}"
+                    title="{{ c['open_task_count'] }} open task{% if c['open_task_count'] != 1 %}s{% endif %} · {{ c['top_open_priority'] }} priority"></span>
+            {% endif %}
+          </div>
+          <div class="inbox-preview">{{ c['last_body'] | truncate(60) }}</div>
+        </div>
+        <div class="inbox-time">{{ c['last_at'] | relative_time }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="inbox-empty">No messages yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT: thread -->
+  <div class="thread-panel">
+    {% if active_stay_id %}
+    <div class="thread-header">
+      <div class="thread-header-top">
+        <div class="thread-title">
+          <strong>{% if thread_room_number %}Room {{ thread_room_number }}{% else %}Stay #{{ active_stay_id }}{% endif %}</strong>
+          {% if thread_guest_phone %}<span class="thread-phone">{{ thread_guest_phone }}</span>{% endif %}
+        </div>
+        <div class="thread-meta-forms">
+          <form method="post" action="/admin/stay/{{ active_stay_id }}" class="thread-meta-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="action" value="set_room" />
+            <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
+            <input type="text" name="room_number" value="{{ thread_room_number or '' }}"
+                   placeholder="Room #" class="thread-meta-input" />
+            <button type="submit" class="thread-meta-btn">Set</button>
+          </form>
+          <form method="post" action="/admin/stay/{{ active_stay_id }}" class="thread-meta-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="action" value="set_checkout" />
+            <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
+            <input type="date" name="check_out_date_part"
+                   value="{{ (thread_check_out_date or '')[:10] }}"
+                   class="thread-meta-input" style="width:130px;" />
+            <input type="time" name="check_out_time_part" step="300"
+                   value="{{ (thread_check_out_date or '')[11:16] }}"
+                   class="thread-meta-input" style="width:90px;" />
+            <button type="submit" class="thread-meta-btn">Set</button>
+          </form>
+        </div>
+      </div>
+      {% if thread_tasks %}
+      <div class="thread-task-chips">
+        {% for t in thread_tasks if t['status'] != 'done' %}
+        <span class="task-chip status-open priority-{{ t['priority'] }}" title="{{ t['summary'] or 'Untitled task' }}">
+          <span class="task-chip-label">⚑ {{ (t['summary'] or 'Untitled task') | truncate(40) }}</span>
+          <form method="post" action="/admin/tasks" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="action" value="status" />
+            <input type="hidden" name="task_id" value="{{ t['id'] }}" />
+            <input type="hidden" name="status" value="done" />
+            <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
+            <button type="submit" class="task-chip-done-btn" title="Mark done">✓</button>
+          </form>
+        </span>
+        {% endfor %}
+        {% set done_count = thread_tasks | selectattr('status', 'equalto', 'done') | list | length %}
+        {% if done_count %}
+        <a href="/admin/tasks" class="task-chip status-done">
+          ✓ {{ done_count }} completed
+        </a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+      {% for r in thread_rows %}
+      <div class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}">
+        <div>{{ r['body'] }}</div>
+        <div class="meta">{{ r['created_at'] | relative_time }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="reply-box">
+      <form method="post" action="/admin/stay/{{ active_stay_id }}/reply">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <input type="hidden" name="next" value="/admin/messages?stay={{ active_stay_id }}" />
+        <textarea name="body" rows="2" placeholder="Type a reply..."></textarea>
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </div>
+
+    {% else %}
+    <div class="thread-empty">
+      <p>Select a conversation to view messages</p>
+    </div>
+    {% endif %}
+  </div>
+
 </div>
 
-{% if not rows %}
-<div class="panel" style="text-align:center; color:var(--muted); padding:48px;">
-  No messages yet.
-</div>
-{% endif %}
+<script>
+  const el = document.getElementById('chat-messages');
+  if (el) { el.scrollTop = el.scrollHeight; }
+</script>
 
 {% endblock %}

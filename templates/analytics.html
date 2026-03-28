@@ -1,0 +1,143 @@
+{% extends "base_admin.html" %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Analytics</h2>
+    <p class="page-subtitle">Last {{ days }} days</p>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a href="?days=7"  class="btn-outline {% if days==7  %}active{% endif %}">7d</a>
+    <a href="?days=30" class="btn-outline {% if days==30 %}active{% endif %}">30d</a>
+    <a href="?days=90" class="btn-outline {% if days==90 %}active{% endif %}">90d</a>
+  </div>
+</div>
+
+{# ── Top stat cards ── #}
+<div class="analytics-grid">
+  <div class="stat-card">
+    <div class="stat-label">Guest Messages</div>
+    <div class="stat-value">{{ data.total_inbound }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">AI Resolved</div>
+    <div class="stat-value">{{ data.ai_replies }}
+      <span class="stat-pct {% if data.ai_rate >= 70 %}good{% elif data.ai_rate >= 40 %}ok{% else %}warn{% endif %}">
+        {{ data.ai_rate }}%
+      </span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Tasks Created</div>
+    <div class="stat-value">{{ data.tasks_created }}</div>
+  </div>
+  <div class="stat-card highlight">
+    <div class="stat-label">Est. Staff Hours Saved</div>
+    <div class="stat-value">{{ data.hours_saved }}h</div>
+    <div class="stat-hint">est. based on 4 min avg staff interaction</div>
+  </div>
+</div>
+
+{# ── Response times ── #}
+<div class="analytics-row">
+  <div class="panel" style="flex:1">
+    <div class="panel-title">Response Times</div>
+    <table class="info-table">
+      <tr>
+        <td>AI response time</td>
+        <td><strong>~instant</strong> <span class="badge-green">✓</span></td>
+      </tr>
+      <tr>
+        <td>Avg staff reply time</td>
+        <td>
+          {% if data.avg_staff_reply_min is not none %}
+            {% set h = (data.avg_staff_reply_min // 60)|int %}
+            {% set m = (data.avg_staff_reply_min % 60)|int %}
+            <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
+          {% else %}
+            <span class="muted">No data yet</span>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Avg task resolution time</td>
+        <td>
+          {% if data.avg_resolution_min is not none %}
+            {% set h = (data.avg_resolution_min // 60)|int %}
+            {% set m = (data.avg_resolution_min % 60)|int %}
+            <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
+          {% else %}
+            <span class="muted">No data yet</span>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="panel" style="flex:1">
+    <div class="panel-title">By Department</div>
+    <div style="margin-top:16px;">
+    {% if data.dept_breakdown %}
+      {% set total_tasks = data.dept_breakdown | sum(attribute='count') %}
+      {% for d in data.dept_breakdown %}
+        <div class="dept-row">
+          <span class="dept-name">{{ d.department | capitalize }}</span>
+          <div class="dept-bar-wrap">
+            <div class="dept-bar" style="width:{{ ((d.count / total_tasks) * 100)|int }}%"></div>
+          </div>
+          <span class="dept-count">{{ d.count }}</span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="muted">No tasks yet.</p>
+    {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Peak hours chart ── #}
+<div class="panel">
+  <div class="panel-title">Peak Request Hours</div>
+  <canvas id="peakChart" height="80"></canvas>
+</div>
+
+{# ── ROI callout ── #}
+{% if data.ai_replies > 0 %}
+<div class="panel roi-panel">
+  <div class="roi-headline">
+    Your AI handled <strong>{{ data.ai_replies }} requests</strong> in the last {{ days }} days.
+  </div>
+  <div class="roi-sub">
+    That's an estimated <strong>{{ data.hours_saved }} hours</strong> of front-desk time saved —
+    roughly <strong>${{ (data.hours_saved * 18) | int }}</strong> in labor value at $18/hr.
+  </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+  const hours = Array.from({length: 24}, (_, i) => {
+    const h = i % 12 || 12;
+    return (i < 12 ? h + 'am' : h + 'pm');
+  });
+  const counts = {{ data.peak_hours_list | tojson }};
+
+  new Chart(document.getElementById('peakChart'), {
+    type: 'bar',
+    data: {
+      labels: hours,
+      datasets: [{
+        data: counts,
+        backgroundColor: '#2d2d2d',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+</script>
+{% endblock %}

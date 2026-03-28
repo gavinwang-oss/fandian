@@ -5,6 +5,53 @@
   <h2>Knowledge Base</h2>
 </div>
 
+{% if suggestions %}
+<div class="panel suggestion-panel" style="margin-bottom:20px; border-left:3px solid var(--warning, #f59e0b);">
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+    <h3 style="margin:0;">✦ Suggested Additions</h3>
+    <span class="badge" style="background:#fef3c7; color:#92400e; font-size:12px; padding:2px 8px; border-radius:99px;">{{ suggestions|length }} pending</span>
+  </div>
+  <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">
+    These were drafted by AI from guest conversations. Review and approve to add to your knowledge base, or dismiss to ignore.
+  </p>
+
+  {% for s in suggestions %}
+  <div class="suggestion-card">
+    <div class="suggestion-context">
+      <span class="suggestion-label">Guest asked:</span> {{ s['guest_question'] }}
+    </div>
+    <div class="suggestion-context">
+      <span class="suggestion-label">Staff replied:</span> {{ s['staff_answer'] }}
+    </div>
+
+    <form method="post" class="suggestion-approve-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="action" value="approve_suggestion" />
+      <input type="hidden" name="suggestion_id" value="{{ s['id'] }}" />
+      <div class="field" style="margin-bottom:8px;">
+        <label class="field-label">Title</label>
+        <input class="input" type="text" name="title" value="{{ s['suggested_title'] or '' }}" required />
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label class="field-label">Content</label>
+        <textarea class="input" name="content" rows="3" required>{{ s['suggested_content'] or '' }}</textarea>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" type="submit" style="background:#16a34a;">✓ Add to Knowledge Base</button>
+      </div>
+    </form>
+
+    <form method="post" style="margin-top:6px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="action" value="dismiss_suggestion" />
+      <input type="hidden" name="suggestion_id" value="{{ s['id'] }}" />
+      <button class="btn secondary btn-sm" type="submit">Dismiss</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="panel">
   {% if rows %}
   <table class="table">

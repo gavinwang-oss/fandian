@@ -77,7 +77,7 @@
     </div>
 
     <div class="small">
-      Stay <a href="/admin/stay/{{ r['stay_id'] }}">#{{ r['stay_id'] }}</a> · {{ r['created_at'] | relative_time }}
+      <a href="/admin/stay/{{ r['stay_id'] }}">{% if r['room_number'] %}Room {{ r['room_number'] }}{% else %}Stay #{{ r['stay_id'] }}{% endif %}</a> · {{ r['created_at'] | relative_time }}
     </div>
 
     <div class="task-card-controls">
@@ -100,13 +100,16 @@
           </select>
         </div>
       </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-        <input type="hidden" name="action" value="status" />
-        <input type="hidden" name="task_id" value="{{ r['id'] }}" />
-        <input type="hidden" name="status" value="done" />
-        <button class="btn btn-sm secondary" type="submit">Mark Done</button>
-      </form>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <input type="hidden" name="action" value="status" />
+          <input type="hidden" name="task_id" value="{{ r['id'] }}" />
+          <input type="hidden" name="status" value="done" />
+          <button class="btn btn-sm secondary" type="submit">Mark Done</button>
+        </form>
+        <a class="btn btn-sm" href="/admin/messages?stay={{ r['stay_id'] }}">💬 Message</a>
+      </div>
     </div>
   </div>
   {% endfor %}
@@ -127,7 +130,7 @@
       <span class="badge low">{{ (r['department'] or 'frontdesk')|capitalize }}</span>
     </div>
     <div class="small">
-      Stay <a href="/admin/stay/{{ r['stay_id'] }}">#{{ r['stay_id'] }}</a> · {{ r['guest_phone'] }} · {{ r['created_at'] | relative_time }}
+      <a href="/admin/stay/{{ r['stay_id'] }}">{% if r['room_number'] %}Room {{ r['room_number'] }}{% else %}Stay #{{ r['stay_id'] }}{% endif %}</a> · {{ r['created_at'] | relative_time }}
     </div>
     <div class="task-card-controls">
       <form method="post" style="display:contents;">

@@ -135,6 +135,11 @@ _SCHEMA = [
             guest_id INTEGER NOT NULL,
             hotel_id INTEGER NOT NULL,
             status TEXT NOT NULL,
+            room_number TEXT,
+            check_out_date TEXT,
+            welcome_sent_at {TS_NULL},
+            checkout_reminder_sent_at {TS_NULL},
+            post_stay_sent_at {TS_NULL},
             created_at {TS},
             FOREIGN KEY (guest_id) REFERENCES guests (id),
             FOREIGN KEY (hotel_id) REFERENCES hotels (id)
@@ -148,6 +153,7 @@ _SCHEMA = [
             id {PK},
             stay_id INTEGER NOT NULL,
             direction TEXT NOT NULL,
+            source TEXT DEFAULT 'guest',
             body TEXT NOT NULL,
             created_at {TS},
             FOREIGN KEY (stay_id) REFERENCES stays (id)
@@ -201,6 +207,23 @@ _SCHEMA = [
         )
         """,
         ["CREATE INDEX IF NOT EXISTS idx_hotel_docs_hotel ON hotel_docs (hotel_id)"],
+    ),
+    (
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_suggestions (
+            id {PK},
+            hotel_id INTEGER NOT NULL,
+            stay_id INTEGER,
+            guest_question TEXT NOT NULL,
+            staff_answer TEXT NOT NULL,
+            suggested_title TEXT,
+            suggested_content TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at {TS},
+            FOREIGN KEY (hotel_id) REFERENCES hotels (id)
+        )
+        """,
+        ["CREATE INDEX IF NOT EXISTS idx_knowledge_suggestions_hotel ON knowledge_suggestions (hotel_id, status)"],
     ),
     (
         """
@@ -275,6 +298,11 @@ def _ensure_migrations():
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS summary TEXT")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS department TEXT")
         _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS hotel_id INTEGER")
+        _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS room_number TEXT")
+        _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS check_out_date TEXT")
+        _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS welcome_sent_at TIMESTAMPTZ")
+        _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS checkout_reminder_sent_at TIMESTAMPTZ")
+        _execute("ALTER TABLE stays ADD COLUMN IF NOT EXISTS post_stay_sent_at TIMESTAMPTZ")
         _execute("CREATE INDEX IF NOT EXISTS idx_staff_users_hotel ON staff_users (hotel_id)")
         _execute(
             "CREATE INDEX IF NOT EXISTS idx_guest_hotel_prefs_guest_hotel ON guest_hotel_preferences (guest_id, hotel_id)"
@@ -310,11 +338,51 @@ def _ensure_migrations():
         default_hotel_id = _fetchone("SELECT id FROM hotels ORDER BY id ASC LIMIT 1")
         if default_hotel_id:
             cur.execute("UPDATE stays SET hotel_id = ? WHERE hotel_id IS NULL", (default_hotel_id["id"],))
+    if "room_number" not in names:
+        cur.execute("ALTER TABLE stays ADD COLUMN room_number TEXT")
+    if "check_out_date" not in names:
+        cur.execute("ALTER TABLE stays ADD COLUMN check_out_date TEXT")
+    if "welcome_sent_at" not in names:
+        cur.execute("ALTER TABLE stays ADD COLUMN welcome_sent_at TEXT")
+    if "checkout_reminder_sent_at" not in names:
+        cur.execute("ALTER TABLE stays ADD COLUMN checkout_reminder_sent_at TEXT")
+    if "post_stay_sent_at" not in names:
+        cur.execute("ALTER TABLE stays ADD COLUMN post_stay_sent_at TEXT")
+
+    cols = cur.execute("PRAGMA table_info(messages)").fetchall()
+    names = {row["name"] for row in cols}
+    if "source" not in names:
+        cur.execute("ALTER TABLE messages ADD COLUMN source TEXT DEFAULT 'guest'")
+        # Best-effort backfill: existing outbound messages were almost all AI replies
+        cur.execute("UPDATE messages SET source = 'ai' WHERE direction = 'outbound'")
 
     cols = cur.execute("PRAGMA table_info(hotels)").fetchall()
     names = {row["name"] for row in cols}
     if "phone_number" not in names:
         cur.execute("ALTER TABLE hotels ADD COLUMN phone_number TEXT")
+
+    # knowledge_suggestions table (added for self-expanding KB)
+    existing_tables = {row[0] for row in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+    if "knowledge_suggestions" not in existing_tables:
+        cur.execute("""
+            CREATE TABLE knowledge_suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hotel_id INTEGER NOT NULL,
+                stay_id INTEGER,
+                guest_question TEXT NOT NULL,
+                staff_answer TEXT NOT NULL,
+                suggested_title TEXT,
+                suggested_content TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL
+            )
+        """)
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_knowledge_suggestions_hotel "
+            "ON knowledge_suggestions (hotel_id, status)"
+        )
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_staff_users_hotel ON staff_users (hotel_id)")
     cur.execute(
@@ -444,6 +512,17 @@ def _normalize_phone(value: str) -> str:
     if value.startswith("+") and digits:
         return f"+{digits}"
     return value.strip()
+
+
+def set_hotel_phone(hotel_id: int, phone_number: str) -> None:
+    _execute("UPDATE hotels SET phone_number = ? WHERE id = ?", (phone_number, hotel_id))
+
+
+def get_hotel(hotel_id: int):
+    return _fetchone(
+        "SELECT id, name, phone_number, timezone FROM hotels WHERE id = ?",
+        (hotel_id,),
+    )
 
 
 def get_default_hotel_id() -> int:
@@ -578,6 +657,63 @@ def is_rate_limited(guest_id: int, hotel_id: int, window_seconds: int, limit: in
 
 # === Stays / Messages ===
 
+def get_stay(hotel_id: int, stay_id: int):
+    return _fetchone(
+        """SELECT id, guest_id, hotel_id, status, room_number, check_out_date,
+                  welcome_sent_at, checkout_reminder_sent_at, post_stay_sent_at,
+                  created_at
+           FROM stays WHERE id = ? AND hotel_id = ?""",
+        (stay_id, hotel_id),
+    )
+
+
+def set_stay_room_number(hotel_id: int, stay_id: int, room_number: str | None) -> None:
+    _execute(
+        "UPDATE stays SET room_number = ? WHERE id = ? AND hotel_id = ?",
+        (room_number or None, stay_id, hotel_id),
+    )
+
+
+def set_stay_checkout_date(hotel_id: int, stay_id: int, check_out_date: str | None) -> None:
+    _execute(
+        "UPDATE stays SET check_out_date = ? WHERE id = ? AND hotel_id = ?",
+        (check_out_date or None, stay_id, hotel_id),
+    )
+
+
+def mark_welcome_sent(stay_id: int) -> None:
+    _execute("UPDATE stays SET welcome_sent_at = ? WHERE id = ?", (_now(), stay_id))
+
+
+def mark_checkout_reminder_sent(stay_id: int) -> None:
+    _execute("UPDATE stays SET checkout_reminder_sent_at = ? WHERE id = ?", (_now(), stay_id))
+
+
+def mark_post_stay_sent(stay_id: int) -> None:
+    _execute("UPDATE stays SET post_stay_sent_at = ? WHERE id = ?", (_now(), stay_id))
+
+
+def get_stays_needing_outreach():
+    """Return all stays with a checkout date set that haven't had all outreach sent."""
+    return _fetchall(
+        """
+        SELECT s.id AS stay_id, s.hotel_id, s.room_number, s.check_out_date,
+               s.checkout_reminder_sent_at, s.post_stay_sent_at,
+               g.phone AS guest_phone,
+               h.phone_number AS hotel_phone,
+               h.name AS hotel_name
+        FROM stays s
+        JOIN guests g ON g.id = s.guest_id
+        JOIN hotels h ON h.id = s.hotel_id
+        WHERE s.check_out_date IS NOT NULL
+          AND h.phone_number IS NOT NULL
+          AND g.phone IS NOT NULL
+          AND (s.checkout_reminder_sent_at IS NULL OR s.post_stay_sent_at IS NULL)
+        """,
+        (),
+    )
+
+
 def get_or_create_active_stay(guest_id: int, hotel_id: int) -> int:
     row = _fetchone(
         "SELECT id FROM stays WHERE guest_id = ? AND hotel_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1",
@@ -591,10 +727,10 @@ def get_or_create_active_stay(guest_id: int, hotel_id: int) -> int:
     )
 
 
-def log_message(stay_id: int, direction: str, body: str) -> int:
+def log_message(stay_id: int, direction: str, body: str, source: str = "guest") -> int:
     return _insert_returning_id(
-        "INSERT INTO messages (stay_id, direction, body, created_at) VALUES (?, ?, ?, ?)",
-        (stay_id, direction, body, _now()),
+        "INSERT INTO messages (stay_id, direction, source, body, created_at) VALUES (?, ?, ?, ?, ?)",
+        (stay_id, direction, source, body, _now()),
     )
 
 
@@ -602,12 +738,47 @@ def list_messages_for_hotel(hotel_id: int, limit: int = 200):
     return _fetchall(
         """
         SELECT m.id, m.direction, m.body, m.created_at,
-               g.phone AS guest_phone, s.id AS stay_id
+               g.phone AS guest_phone, s.id AS stay_id, s.room_number
         FROM messages m
         JOIN stays s ON s.id = m.stay_id
         JOIN guests g ON g.id = s.guest_id
         WHERE s.hotel_id = ?
         ORDER BY s.id DESC, m.id ASC
+        LIMIT ?
+        """,
+        (hotel_id, limit),
+    )
+
+
+def list_conversations_for_hotel(hotel_id: int, limit: int = 100):
+    """One row per stay, showing the last message and open task status."""
+    return _fetchall(
+        """
+        SELECT s.id AS stay_id, s.room_number, g.phone AS guest_phone,
+               m.body AS last_body, m.direction AS last_direction,
+               m.created_at AS last_at,
+               (SELECT COUNT(*) FROM tasks t
+                WHERE t.stay_id = s.id AND t.status != 'done') AS open_task_count,
+               (SELECT CASE MIN(CASE t.priority
+                                WHEN 'urgent' THEN 0
+                                WHEN 'high'   THEN 1
+                                WHEN 'normal' THEN 2
+                                WHEN 'low'    THEN 3
+                                ELSE 4 END)
+                       WHEN 0 THEN 'urgent'
+                       WHEN 1 THEN 'high'
+                       WHEN 2 THEN 'normal'
+                       WHEN 3 THEN 'low'
+                       ELSE NULL END
+                FROM tasks t
+                WHERE t.stay_id = s.id AND t.status != 'done') AS top_open_priority
+        FROM stays s
+        JOIN guests g ON g.id = s.guest_id
+        JOIN messages m ON m.id = (
+            SELECT MAX(id) FROM messages WHERE stay_id = s.id
+        )
+        WHERE s.hotel_id = ?
+        ORDER BY m.created_at DESC
         LIMIT ?
         """,
         (hotel_id, limit),
@@ -725,7 +896,7 @@ def list_tasks(
         SELECT t.id, t.type, t.status, t.summary, t.department, t.priority,
                t.notify_guest_when_done, t.created_at, t.created_from_message_id,
                t.assigned_to_staff_user_id, t.completed_at,
-               g.phone AS guest_phone, s.id AS stay_id,
+               g.phone AS guest_phone, s.id AS stay_id, s.room_number,
                m.body AS created_from_body
         FROM tasks t
         JOIN stays s ON s.id = t.stay_id
@@ -735,11 +906,24 @@ def list_tasks(
         ORDER BY
             CASE t.status WHEN 'done' THEN 1 ELSE 0 END ASC,
             CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 ELSE 4 END ASC,
-            t.id DESC
+            t.id ASC
         LIMIT ?
         """
     params.append(limit)
     return _fetchall(sql, tuple(params))
+
+
+def list_tasks_for_stay(hotel_id: int, stay_id: int):
+    return _fetchall(
+        """
+        SELECT t.id, t.summary, t.status, t.priority, t.created_at
+        FROM tasks t
+        JOIN stays s ON s.id = t.stay_id
+        WHERE t.stay_id = ? AND s.hotel_id = ?
+        ORDER BY t.id ASC
+        """,
+        (stay_id, hotel_id),
+    )
 
 
 def get_task_stats(hotel_id: int) -> dict:
@@ -785,3 +969,197 @@ def update_task_fields(task_id: int, assigned_to: int | None, priority: str, not
 
 def get_task(task_id: int):
     return _fetchone("SELECT * FROM tasks WHERE id = ?", (task_id,))
+
+
+# === Knowledge Suggestions ===
+
+def create_knowledge_suggestion(
+    hotel_id: int,
+    stay_id: int | None,
+    guest_question: str,
+    staff_answer: str,
+    suggested_title: str | None,
+    suggested_content: str | None,
+) -> int:
+    return _insert_returning_id(
+        """
+        INSERT INTO knowledge_suggestions
+            (hotel_id, stay_id, guest_question, staff_answer, suggested_title, suggested_content, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+        """,
+        (hotel_id, stay_id, guest_question, staff_answer, suggested_title, suggested_content, _now()),
+    )
+
+
+def list_knowledge_suggestions(hotel_id: int, status: str = "pending"):
+    return _fetchall(
+        """
+        SELECT id, stay_id, guest_question, staff_answer, suggested_title, suggested_content, status, created_at
+        FROM knowledge_suggestions
+        WHERE hotel_id = ? AND status = ?
+        ORDER BY id DESC
+        """,
+        (hotel_id, status),
+    )
+
+
+def update_knowledge_suggestion_status(suggestion_id: int, status: str) -> None:
+    _execute(
+        "UPDATE knowledge_suggestions SET status = ? WHERE id = ?",
+        (status, suggestion_id),
+    )
+
+
+def get_analytics(hotel_id: int, days: int = 30) -> dict:
+    """Return analytics data for a hotel over the last N days."""
+    since = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    # Total inbound guest messages
+    row = _fetchone(
+        """
+        SELECT COUNT(*) AS cnt FROM messages m
+        JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
+        """,
+        (hotel_id, since),
+    )
+    total_inbound = int(row["cnt"]) if row else 0
+
+    # Inbound messages that got an AI reply (no task created within 2 min of that message)
+    row = _fetchone(
+        """
+        SELECT COUNT(*) AS cnt FROM messages m
+        JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
+        AND EXISTS (
+            SELECT 1 FROM messages r
+            WHERE r.stay_id = m.stay_id AND r.source = 'ai'
+            AND r.created_at > m.created_at
+            AND (julianday(r.created_at) - julianday(m.created_at)) * 1440 < 2
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM tasks t
+            WHERE t.stay_id = m.stay_id
+            AND t.created_at >= m.created_at
+            AND (julianday(t.created_at) - julianday(m.created_at)) * 1440 < 2
+        )
+        """,
+        (hotel_id, since),
+    )
+    ai_replies = int(row["cnt"]) if row else 0
+
+    # Tasks created
+    row = _fetchone(
+        """
+        SELECT COUNT(*) AS cnt FROM tasks t
+        JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.created_at >= ?
+        """,
+        (hotel_id, since),
+    )
+    tasks_created = int(row["cnt"]) if row else 0
+
+    # Avg task resolution time in minutes (done tasks only)
+    row = _fetchone(
+        """
+        SELECT AVG((julianday(t.completed_at) - julianday(t.created_at)) * 1440) AS avg_min
+        FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.status = 'done'
+        AND t.completed_at IS NOT NULL AND t.created_at >= ?
+        """,
+        (hotel_id, since),
+    )
+    avg_resolution_min = round(row["avg_min"]) if row and row["avg_min"] else None
+
+    # Avg staff reply time: for each staff reply, find the most recent guest
+    # message before it in the same stay (within 2 hours). This avoids
+    # double-counting follow-up questions.
+    row = _fetchone(
+        """
+        SELECT AVG((julianday(r.created_at) - julianday(m.created_at)) * 1440) AS avg_min
+        FROM messages r
+        JOIN stays s ON s.id = r.stay_id
+        JOIN messages m ON m.id = (
+            SELECT MAX(m2.id) FROM messages m2
+            WHERE m2.stay_id = r.stay_id
+            AND m2.source = 'guest'
+            AND m2.created_at < r.created_at
+            AND (julianday(r.created_at) - julianday(m2.created_at)) * 1440 <= 120
+        )
+        WHERE r.source = 'staff' AND s.hotel_id = ? AND r.created_at >= ?
+        """,
+        (hotel_id, since),
+    )
+    avg_staff_reply_min = round(row["avg_min"]) if row and row["avg_min"] else None
+
+    # Department breakdown
+    dept_rows = _fetchall(
+        """
+        SELECT t.department, COUNT(*) AS cnt FROM tasks t
+        JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.created_at >= ?
+        GROUP BY t.department ORDER BY cnt DESC
+        """,
+        (hotel_id, since),
+    )
+    dept_breakdown = [{"department": r["department"] or "unspecified", "count": int(r["cnt"])} for r in dept_rows]
+
+    # Avg resolution time by department
+    dept_time_rows = _fetchall(
+        """
+        SELECT t.department,
+               AVG((julianday(t.completed_at) - julianday(t.created_at)) * 1440) AS avg_min
+        FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.status = 'done'
+        AND t.completed_at IS NOT NULL AND t.created_at >= ?
+        GROUP BY t.department
+        """,
+        (hotel_id, since),
+    )
+    dept_resolution = [
+        {"department": r["department"] or "unspecified", "avg_min": round(r["avg_min"])}
+        for r in dept_time_rows if r["avg_min"]
+    ]
+
+    # Peak hours (0-23)
+    hour_rows = _fetchall(
+        """
+        SELECT strftime('%H', m.created_at) AS hr, COUNT(*) AS cnt
+        FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
+        GROUP BY hr ORDER BY hr
+        """,
+        (hotel_id, since),
+    )
+    peak_hours = {int(r["hr"]): int(r["cnt"]) for r in hour_rows}
+    peak_hours_list = [peak_hours.get(h, 0) for h in range(24)]
+
+    # Daily volume for trend (last 30 days)
+    daily_rows = _fetchall(
+        """
+        SELECT strftime('%Y-%m-%d', m.created_at) AS day, COUNT(*) AS cnt
+        FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ?
+        GROUP BY day ORDER BY day
+        """,
+        (hotel_id, since),
+    )
+    daily_volume = [{"day": r["day"], "count": int(r["cnt"])} for r in daily_rows]
+
+    ai_rate = min(100, round(ai_replies / total_inbound * 100)) if total_inbound else 0
+    hours_saved = round(ai_replies * 4 / 60, 1)
+
+    return {
+        "days": days,
+        "total_inbound": total_inbound,
+        "ai_replies": ai_replies,
+        "tasks_created": tasks_created,
+        "ai_rate": ai_rate,
+        "hours_saved": hours_saved,
+        "avg_resolution_min": avg_resolution_min,
+        "avg_staff_reply_min": avg_staff_reply_min,
+        "dept_breakdown": dept_breakdown,
+        "dept_resolution": dept_resolution,
+        "peak_hours_list": peak_hours_list,
+        "daily_volume": daily_volume,
+    }

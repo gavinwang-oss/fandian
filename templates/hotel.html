@@ -2,20 +2,24 @@
 {% block content %}
 
 <div class="page-header">
-  <h2>Hotel Info</h2>
+  <h2>Hotel Info & Knowledge</h2>
 </div>
 
+{# ── Section 1: Quick Facts ── #}
+<div class="section-label">Quick Facts</div>
+<p class="section-hint">Short, factual entries — WiFi password, hours, phone numbers. The AI looks these up directly to answer common guest questions.</p>
+
 <div class="panel">
-  {% if rows %}
-    {% for r in rows %}
+  {% if info_rows %}
+    {% for r in info_rows %}
     <div class="info-row">
       <div class="info-row-key">{{ r['key'] | replace('_', ' ') | title }}</div>
       <div class="info-row-value">{{ r['value'] }}</div>
       <div class="info-row-actions">
-        <a class="btn btn-sm secondary" href="{{ url_for('admin.admin_hotel', edit_id=r['id']) }}">Edit</a>
+        <a class="btn btn-sm secondary" href="{{ url_for('admin.admin_hotel', edit_info_id=r['id']) }}">Edit</a>
         <form method="post" style="display:inline;" onsubmit="return confirm('Delete this entry?')">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-          <input type="hidden" name="action" value="delete" />
+          <input type="hidden" name="action" value="delete_info" />
           <input type="hidden" name="info_id" value="{{ r['id'] }}" />
           <button class="btn btn-sm btn-danger" type="submit">Delete</button>
         </form>
@@ -23,26 +27,134 @@
     </div>
     {% endfor %}
   {% else %}
-    <p style="color:var(--muted); text-align:center; padding:24px 0;">No hotel info yet. Add some below.</p>
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">No quick facts yet. Add some below.</p>
   {% endif %}
 </div>
 
-<div class="panel" style="margin-top:20px;">
-  <h3>{% if edit_row %}Edit Entry{% else %}Add / Update{% endif %}</h3>
+<div class="panel" style="margin-top:16px;">
+  <h3>{% if edit_info_row %}Edit Entry{% else %}Add Quick Fact{% endif %}</h3>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
-    <input type="hidden" name="action" value="upsert" />
+    <input type="hidden" name="action" value="upsert_info" />
     <div class="form-group">
       <label>Key</label>
-      <input class="input" type="text" name="key" value="{{ edit_row['key'] if edit_row else '' }}" placeholder="e.g. breakfast_hours" />
+      <input class="input" type="text" name="key" value="{{ edit_info_row['key'] if edit_info_row else '' }}" placeholder="e.g. breakfast_hours" />
     </div>
     <div class="form-group">
       <label>Value</label>
-      <input class="input" type="text" name="value" value="{{ edit_row['value'] if edit_row else '' }}" placeholder="e.g. 6:30 AM – 10:30 AM" />
+      <input class="input" type="text" name="value" value="{{ edit_info_row['value'] if edit_info_row else '' }}" placeholder="e.g. 7:00 AM – 10:30 AM" />
     </div>
     <div style="display:flex; gap:8px;">
       <button class="btn" type="submit">Save</button>
-      {% if edit_row %}
+      {% if edit_info_row %}
+        <a class="btn secondary" href="{{ url_for('admin.admin_hotel') }}">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{# ── Section 2: Knowledge Base ── #}
+<div class="section-label" style="margin-top:40px;">Knowledge Base</div>
+<p class="section-hint">Longer articles and policies. The AI searches these to answer nuanced guest questions. Also where self-learning suggestions appear for review.</p>
+
+{% if suggestions %}
+<div class="panel suggestion-panel" style="margin-bottom:16px; border-left:3px solid #f59e0b;">
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+    <h3 style="margin:0;">✦ Suggested Additions</h3>
+    <span class="badge" style="background:#fef3c7; color:#92400e; font-size:12px; padding:2px 8px; border-radius:99px;">{{ suggestions|length }} pending</span>
+  </div>
+  <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">
+    Drafted by AI from guest conversations. Approve to add to your knowledge base, or dismiss to ignore.
+  </p>
+  {% for s in suggestions %}
+  <div class="suggestion-card">
+    <div class="suggestion-context">
+      <span class="suggestion-label">Guest asked:</span> {{ s['guest_question'] }}
+    </div>
+    <div class="suggestion-context">
+      <span class="suggestion-label">Staff replied:</span> {{ s['staff_answer'] }}
+    </div>
+    <form method="post" class="suggestion-approve-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="action" value="approve_suggestion" />
+      <input type="hidden" name="suggestion_id" value="{{ s['id'] }}" />
+      <div class="field" style="margin-bottom:8px;">
+        <label class="field-label">Title</label>
+        <input class="input" type="text" name="title" value="{{ s['suggested_title'] or '' }}" required />
+      </div>
+      <div class="field" style="margin-bottom:10px;">
+        <label class="field-label">Content</label>
+        <textarea class="input" name="content" rows="3" required>{{ s['suggested_content'] or '' }}</textarea>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" type="submit" style="background:#16a34a;">✓ Add to Knowledge Base</button>
+        <form method="post" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <input type="hidden" name="action" value="dismiss_suggestion" />
+          <input type="hidden" name="suggestion_id" value="{{ s['id'] }}" />
+          <button class="btn secondary btn-sm" type="submit">Dismiss</button>
+        </form>
+      </div>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="panel">
+  {% if doc_rows %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Content</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in doc_rows %}
+      <tr>
+        <td style="font-weight:600; white-space:nowrap;">{{ r['title'] }}</td>
+        <td style="color:var(--muted); max-width:400px;">{{ r['content'][:160] }}{% if r['content']|length > 160 %}…{% endif %}</td>
+        <td class="small" style="white-space:nowrap;">{{ r['created_at'] }}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-sm secondary" href="{{ url_for('admin.admin_hotel', edit_doc_id=r['id']) }}">Edit</a>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete this entry?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <input type="hidden" name="action" value="delete_doc" />
+            <input type="hidden" name="doc_id" value="{{ r['id'] }}" />
+            <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p style="color:var(--muted); text-align:center; padding:24px 0;">No knowledge entries yet. Add one below.</p>
+  {% endif %}
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <h3>{% if edit_doc %}Edit Article{% else %}Add Knowledge Article{% endif %}</h3>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="action" value="{{ 'edit_doc' if edit_doc else 'add_doc' }}" />
+    {% if edit_doc %}
+      <input type="hidden" name="doc_id" value="{{ edit_doc['id'] }}" />
+    {% endif %}
+    <div class="form-group">
+      <label>Title</label>
+      <input class="input" type="text" name="title" value="{{ edit_doc['title'] if edit_doc else '' }}" placeholder="e.g. Spa Services" />
+    </div>
+    <div class="form-group">
+      <label>Content</label>
+      <textarea class="input" name="content" rows="4" placeholder="e.g. The spa is on the 3rd floor, open 9am–8pm. Appointments required...">{{ edit_doc['content'] if edit_doc else '' }}</textarea>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" type="submit">Save</button>
+      {% if edit_doc %}
         <a class="btn secondary" href="{{ url_for('admin.admin_hotel') }}">Cancel</a>
       {% endif %}
     </div>

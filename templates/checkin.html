@@ -1,0 +1,56 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>New Guest Check-in</h2>
+  <p>A welcome text is sent automatically once you submit.</p>
+</div>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="panel" style="max-width: 520px;">
+  <form method="post" class="checkin-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+    <div class="field">
+      <label class="field-label">Phone number</label>
+      <input class="input" type="tel" name="phone"
+             placeholder="415 555 0100  ·  +44 7911 123456"
+             autofocus autocomplete="off" />
+      <div class="field-hint">US: any format &nbsp;·&nbsp; International: include + and country code</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Room number</label>
+      <input class="input" type="text" name="room_number" placeholder="e.g. 412" />
+    </div>
+
+    <div class="field">
+      <label class="field-label">Checkout</label>
+      <div style="display:flex; gap:10px;">
+        <input class="input" type="date" name="check_out_date_part" style="flex:1;" />
+        <input class="input" type="time" name="check_out_time_part" step="300" style="width:130px;" />
+      </div>
+      <div class="field-hint">Triggers a reminder the evening before and a feedback message after checkout</div>
+    </div>
+
+    <div style="padding-top: 4px;">
+      <button class="btn checkin-submit" type="submit">Check in &amp; send welcome</button>
+    </div>
+
+  </form>
+</div>
+
+<script>
+  const timeInput = document.querySelector('input[name="check_out_time_part"]');
+  if (timeInput) {
+    const saved = localStorage.getItem('hostly_checkout_time');
+    if (saved) timeInput.value = saved;
+    timeInput.addEventListener('change', function () {
+      if (this.value) localStorage.setItem('hostly_checkout_time', this.value);
+    });
+  }
+</script>
+{% endblock %}

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ title or "Admin" }} · Hotel Concierge</title>
+    <title>{{ title or "Admin" }} · Hostly</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="/static/admin.css" />
@@ -11,22 +11,25 @@
   <body>
     <div class="layout">
       <aside class="sidebar">
-        <h1>Hotel Concierge</h1>
+        <h1>Hostly</h1>
         <nav class="nav">
+          <a href="/admin/checkin" class="{% if active_page=='checkin' %}active{% endif %}">Check In</a>
           <a href="/admin/messages" class="{% if active_page=='messages' %}active{% endif %}">Messages</a>
           <a href="/admin/tasks" class="{% if active_page=='tasks' %}active{% endif %}">Tasks</a>
-          <a href="/admin/hotel" class="{% if active_page=='hotel' %}active{% endif %}">Hotel Info</a>
-          <a href="/admin/knowledge" class="{% if active_page=='knowledge' %}active{% endif %}">Knowledge Base</a>
+          <a href="/admin/hotel" class="{% if active_page=='hotel' %}active{% endif %}">Hotel Info & Knowledge</a>
+          <a href="/admin/rooms" class="{% if active_page=='rooms' %}active{% endif %}">Room QR Codes</a>
           <a href="/admin/users" class="{% if active_page=='users' %}active{% endif %}">Users</a>
+          {% if session.get('role') == 'manager' %}
+          <a href="/admin/analytics" class="{% if active_page=='analytics' %}active{% endif %}">Analytics</a>
+          {% endif %}
         </nav>
       </aside>
-      <main class="content">
-        <div class="topbar">
-          <div class="user">
-            {{ session.get('email','') }} · {{ session.get('role','') }}
-            &nbsp;·&nbsp; <a href="/logout">Logout</a>
-          </div>
+      <main class="content {% block content_class %}{% endblock %}">
+        {% block userbar %}
+        <div class="page-userbar">
+          {{ session.get('email','') }} · {{ session.get('role','') }} · <a href="/logout">Logout</a>
         </div>
+        {% endblock %}
         {% block content %}{% endblock %}
       </main>
     </div>

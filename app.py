@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import requests
 from flask import Flask, request, redirect, url_for, render_template, session, abort
 from twilio.twiml.messaging_response import MessagingResponse
@@ -18,6 +19,7 @@ from db import (
     get_or_create_active_stay,
     log_message,
     get_hotel_info,
+    get_hotel,
     create_task,
     list_hotel_docs,
     update_hotel_doc_embedding,
@@ -27,8 +29,11 @@ from db import (
     log_inbound,
     is_rate_limited,
     get_staff_user_by_email,
+    set_stay_room_number,
+    mark_welcome_sent,
 )
 from admin import admin_bp
+from outreach import run_scheduled_outreach, send_welcome as _send_welcome_sms
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -37,6 +42,15 @@ app.register_blueprint(admin_bp)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hotel-concierge")
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(run_scheduled_outreach, "interval", hours=1, id="outreach")
+    _scheduler.start()
+    logger.info("outreach_scheduler_started")
+except ImportError:
+    logger.warning("apscheduler_not_installed — scheduled outreach disabled")
 
 if app.config.get("APP_ENV") == "production" and app.secret_key == "dev-secret-key":
     raise RuntimeError("FLASK_SECRET_KEY must be set in production")
@@ -113,20 +127,20 @@ def sms_reply():
         log_inbound(guest_id, hotel_id)
 
         stay_id = get_or_create_active_stay(guest_id, hotel_id)
-        inbound_id = log_message(stay_id, "inbound", body)
+        inbound_id = log_message(stay_id, "inbound", body, source="guest")
 
         if text in stop_keywords:
             set_opted_out(guest_id, hotel_id, True)
             logger.info("opt_out", extra={"guest_id": guest_id, "hotel_id": hotel_id})
             reply_text = app.config["STOP_RESPONSE"]
-            log_message(stay_id, "outbound", reply_text)
+            log_message(stay_id, "outbound", reply_text, source="system")
             resp = MessagingResponse()
             resp.message(reply_text)
             return str(resp)
 
         if text == help_keyword:
             reply_text = app.config["HELP_RESPONSE"]
-            log_message(stay_id, "outbound", reply_text)
+            log_message(stay_id, "outbound", reply_text, source="system")
             resp = MessagingResponse()
             resp.message(reply_text)
             return str(resp)
@@ -136,15 +150,43 @@ def sms_reply():
             return str(MessagingResponse())
 
         hotel_info = get_hotel_info(hotel_id)
+
+        # Room check-in via QR code: "Room 402" → set room number, send welcome
+        room_number = _parse_room_number(body)
+        if room_number:
+            set_stay_room_number(hotel_id, stay_id, room_number)
+            hotel = get_hotel(hotel_id)
+            hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
+            from_number = hotel["phone_number"] if hotel else app.config.get("TWILIO_NUMBER", "")
+            reply_text = (
+                f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
+                f"Text us anytime — we're here 24/7 for anything you need during your stay."
+            )
+            log_message(stay_id, "outbound", reply_text, source="ai")
+            mark_welcome_sent(stay_id)
+            logger.info("room_checkin", extra={"stay_id": stay_id, "room": room_number})
+            resp = MessagingResponse()
+            resp.message(reply_text)
+            return str(resp)
+
         reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id)
 
-        log_message(stay_id, "outbound", reply_text)
+        log_message(stay_id, "outbound", reply_text, source="ai")
         resp = MessagingResponse()
         resp.message(reply_text)
         return str(resp)
     except Exception as exc:
         logger.exception("sms_webhook_error", extra={"error": str(exc)})
         return str(MessagingResponse())
+
+
+_ROOM_RE = re.compile(r'^room\s+(\S+)$', re.IGNORECASE)
+
+
+def _parse_room_number(body: str) -> str | None:
+    """Return the room identifier if the message is a QR-code room check-in signal."""
+    m = _ROOM_RE.match(body.strip())
+    return m.group(1) if m else None
 
 
 def route_message(body: str, hotel_info: dict, hotel_id: int, stay_id: int, inbound_message_id: int) -> str:
@@ -385,12 +427,24 @@ def decide_action_llm(user_message: str, hotel_info: dict, stay_id: int, hotel_i
         return None
     model = app.config["OPENAI_MODEL"]
     instructions = (
-        "Decide whether the AI can fully resolve the guest request or if it needs staff. "
-        "If staff is needed, choose action=task and provide a short task_summary and department "
-        "(housekeeping, frontdesk, concierge, valet, maintenance). "
-        "Do NOT invent hotel policies or hours. If the message requires hotel-specific info that is not provided, "
-        "choose action=task with department=frontdesk and a brief reply saying you'll check with staff. "
-        "Always include a polite reply for the guest. Respond with ONLY valid JSON."
+        "You are a hotel AI concierge. Classify the guest message into one of two actions:\n"
+        "1. action=reply — the guest is asking about hotel policies, services, or general information "
+        "and is NOT making a specific request or order. Answer directly using hotel info or general knowledge.\n"
+        "2. action=task — the guest needs something done by hotel staff. Use this for any real, actionable "
+        "service request including: bring towels/amenities, fix AC or maintenance issues, room service food orders, "
+        "billing concerns or disputes, complaints about the room requiring staff attention, booking requests (spa, taxi, dinner), "
+        "valet, late checkout if explicitly requested, or anything requiring physical staff action.\n\n"
+        "Key distinctions:\n"
+        "- 'Can I get a late checkout?' → task (clear request even if phrased as a question)\n"
+        "- 'What is your late checkout policy?' → reply (info question only)\n"
+        "- 'Do you have room service?' → reply (info question)\n"
+        "- 'Can I get a burger and fries?' → task (food order)\n"
+        "- 'I have a question about my bill' → task (billing issue needs staff)\n"
+        "- 'I'm not happy with my room' → task (complaint needs staff follow-up)\n\n"
+        "NEVER create a task for: greetings, thanks, acknowledgments, questions about staff names, "
+        "meta questions about the AI, jokes, gibberish, or anything not a real hotel request.\n"
+        "Do NOT invent hotel policies or hours not provided.\n"
+        "Always include a polite reply. Respond with ONLY valid JSON."
     )
     schema = {
         "action": "reply | task",

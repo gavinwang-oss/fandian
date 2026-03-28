@@ -1,9 +1,27 @@
 {% extends "base_admin.html" %}
 {% block content %}
 
-<div class="page-header">
-  <h2>Stay #{{ stay_id }}</h2>
-  <p>{{ guest_phone }}</p>
+<div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+  <div>
+    <h2>{% if room_number %}Room {{ room_number }}{% else %}Stay #{{ stay_id }}{% endif %}</h2>
+    <p>{{ guest_phone }}{% if room_number %} · Stay #{{ stay_id }}{% endif %}</p>
+  </div>
+  <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:4px;">
+    <form method="post" style="display:flex; gap:8px; align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="action" value="set_room" />
+      <input class="input" name="room_number" value="{{ room_number or '' }}"
+             placeholder="Room number" style="width:130px; padding:7px 10px;" />
+      <button class="btn btn-sm secondary" type="submit">Set room</button>
+    </form>
+    <form method="post" style="display:flex; gap:8px; align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input type="hidden" name="action" value="set_checkout" />
+      <input class="input" type="date" name="check_out_date" value="{{ check_out_date or '' }}"
+             style="width:160px; padding:7px 10px;" />
+      <button class="btn btn-sm secondary" type="submit">Set checkout</button>
+    </form>
+  </div>
 </div>
 
 <div class="chat-container">
