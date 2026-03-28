@@ -289,7 +289,7 @@ for i in range(NUM_STAYS):
 
         if task_summary and random.randint(1, 100) <= task_pct:
             task_dt = msg_dt + timedelta(seconds=random.randint(5, 15))
-            resolved = random.random() > 0.15
+            resolved = tasks_created >= 10 or random.random() > 0.02
 
             p = "%s" if IS_POSTGRES else "?"
             if resolved:
