@@ -258,8 +258,8 @@ for key, value in HOTEL_INFO:
 cur.execute(f"DELETE FROM hotel_docs WHERE hotel_id = {p}", (HOTEL_ID,))
 for title, content in HOTEL_DOCS:
     cur.execute(
-        f"INSERT INTO hotel_docs (hotel_id, title, content) VALUES ({p}, {p}, {p})",
-        (HOTEL_ID, title, content)
+        f"INSERT INTO hotel_docs (hotel_id, title, content, created_at) VALUES ({p}, {p}, {p}, {p})",
+        (HOTEL_ID, title, content, ts(now))
     )
 print(f"Seeded {len(HOTEL_INFO)} hotel info entries and {len(HOTEL_DOCS)} knowledge docs.")
 
