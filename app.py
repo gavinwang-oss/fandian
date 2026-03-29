@@ -20,6 +20,7 @@ from db import (
     log_message,
     get_hotel_info,
     get_hotel,
+    get_stay,
     create_task,
     list_hotel_docs,
     update_hotel_doc_embedding,
@@ -57,14 +58,17 @@ def terms():
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hotel-concierge")
 
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-    _scheduler = BackgroundScheduler(daemon=True)
-    _scheduler.add_job(run_scheduled_outreach, "interval", hours=1, id="outreach")
-    _scheduler.start()
-    logger.info("outreach_scheduler_started")
-except ImportError:
-    logger.warning("apscheduler_not_installed — scheduled outreach disabled")
+if os.environ.get("SCHEDULER_ENABLED", "false").lower() == "true":
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        _scheduler = BackgroundScheduler(daemon=True)
+        _scheduler.add_job(run_scheduled_outreach, "interval", hours=1, id="outreach")
+        _scheduler.start()
+        logger.info("outreach_scheduler_started")
+    except ImportError:
+        logger.warning("apscheduler_not_installed — scheduled outreach disabled")
+else:
+    logger.info("outreach_scheduler_disabled — set SCHEDULER_ENABLED=true to enable")
 
 if app.config.get("APP_ENV") == "production" and app.secret_key == "dev-secret-key":
     raise RuntimeError("FLASK_SECRET_KEY must be set in production")
@@ -165,23 +169,28 @@ def sms_reply():
 
         hotel_info = get_hotel_info(hotel_id)
 
-        # Room check-in via QR code: "Room 402" → set room number, send welcome
+        # Room check-in via QR code: "Room 402" → set room number, send welcome (once only)
         room_number = _parse_room_number(body)
         if room_number:
+            stay = get_stay(hotel_id, stay_id)
+            already_welcomed = stay and stay.get("welcome_sent_at")
             set_stay_room_number(hotel_id, stay_id, room_number)
-            hotel = get_hotel(hotel_id)
-            hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
-            from_number = hotel["phone_number"] if hotel else app.config.get("TWILIO_NUMBER", "")
-            reply_text = (
-                f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
-                f"Text us anytime — we're here 24/7 for anything you need during your stay."
-            )
-            log_message(stay_id, "outbound", reply_text, source="ai")
-            mark_welcome_sent(stay_id)
-            logger.info("room_checkin", extra={"stay_id": stay_id, "room": room_number})
-            resp = MessagingResponse()
-            resp.message(reply_text)
-            return str(resp)
+            if not already_welcomed:
+                hotel = get_hotel(hotel_id)
+                hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
+                reply_text = (
+                    f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
+                    f"Text us anytime — we're here 24/7 for anything you need during your stay."
+                )
+                log_message(stay_id, "outbound", reply_text, source="ai")
+                mark_welcome_sent(stay_id)
+                logger.info("room_checkin", extra={"stay_id": stay_id, "room": room_number})
+                resp = MessagingResponse()
+                resp.message(reply_text)
+                return str(resp)
+            else:
+                logger.info("room_checkin_duplicate_suppressed", extra={"stay_id": stay_id, "room": room_number})
+                return str(MessagingResponse())
 
         reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id)
 

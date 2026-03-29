@@ -23,7 +23,7 @@ class Config:
     )
     HELP_RESPONSE = os.getenv(
         "HELP_RESPONSE",
-        "Hotel Concierge support: reply with your request, or reply STOP to opt out.",
+        "Fandian support: reply with your request, or reply STOP to opt out.",
     )
 
     RATE_LIMIT_COUNT = int(os.getenv("RATE_LIMIT_COUNT", "10"))
