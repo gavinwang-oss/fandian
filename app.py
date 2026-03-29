@@ -44,6 +44,16 @@ app.register_blueprint(admin_bp)
 def index():
     return redirect(url_for("login"))
 
+
+@app.route("/privacy-policy")
+def privacy_policy():
+    return render_template("privacy_policy.html")
+
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hotel-concierge")
 
