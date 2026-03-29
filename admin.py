@@ -1,7 +1,7 @@
 import logging
 import secrets
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, url_for, session, abort, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, session, abort, current_app, jsonify
 from twilio.rest import Client
 
 from auth import login_required, role_required
@@ -18,6 +18,7 @@ from db import (
     upsert_hotel_info,
     delete_hotel_info,
     list_messages_for_stay,
+    list_messages_for_stay_after,
     list_tasks_for_stay,
     get_guest_phone_for_stay,
     log_message,
@@ -148,6 +149,41 @@ def admin_messages():
         title="Messages",
         active_page="messages",
     )
+
+
+@admin_bp.route("/admin/messages/poll")
+@login_required
+def admin_messages_poll():
+    """Return new messages (after a given id) and updated inbox as JSON."""
+    hotel_id = session.get("hotel_id")
+    stay_id = request.args.get("stay", type=int)
+    after_id = request.args.get("after", type=int, default=0)
+
+    new_msgs = []
+    if stay_id:
+        rows = list_messages_for_stay_after(hotel_id, stay_id, after_id)
+        for r in rows:
+            new_msgs.append({
+                "id": r["id"],
+                "direction": r["direction"],
+                "body": r["body"],
+                "created_at": _relative_time(r["created_at"]),
+            })
+
+    # Also send updated inbox so previews / unread dots refresh
+    conversations = list_conversations_for_hotel(hotel_id)
+    inbox = []
+    for c in conversations:
+        inbox.append({
+            "stay_id": c["stay_id"],
+            "label": f"Room {c['room_number']}" if c["room_number"] else c["guest_phone"],
+            "last_body": (c["last_body"] or "")[:60],
+            "last_at": _relative_time(c["last_at"]),
+            "top_open_priority": c.get("top_open_priority") or "",
+            "open_task_count": c.get("open_task_count") or 0,
+        })
+
+    return jsonify({"messages": new_msgs, "inbox": inbox})
 
 
 @admin_bp.route("/admin/tasks", methods=["GET", "POST"])

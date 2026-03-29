@@ -24,7 +24,8 @@
     <div class="inbox-list">
       {% for c in conversations %}
       <a href="/admin/messages?stay={{ c['stay_id'] }}"
-         class="inbox-row {% if active_stay_id == c['stay_id'] %}active{% endif %}">
+         class="inbox-row {% if active_stay_id == c['stay_id'] %}active{% endif %}"
+         data-stay-id="{{ c['stay_id'] }}">
         <div class="inbox-left">
           <div class="inbox-who">
             {% if c['room_number'] %}Room {{ c['room_number'] }}{% else %}{{ c['guest_phone'] }}{% endif %}
@@ -103,7 +104,7 @@
 
     <div class="chat-messages" id="chat-messages">
       {% for r in thread_rows %}
-      <div class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}">
+      <div class="bubble {{ 'inbound' if r['direction']=='inbound' else 'outbound' }}" data-msg-id="{{ r['id'] }}">
         <div>{{ r['body'] }}</div>
         <div class="meta">{{ r['created_at'] | relative_time }}</div>
       </div>
@@ -135,8 +136,57 @@
   const form = document.getElementById('reply-form');
   const textarea = document.getElementById('reply-textarea');
 
+  // Track the highest message id we've seen so polling only fetches new ones
+  let lastMsgId = 0;
+  document.querySelectorAll('.bubble[data-msg-id]').forEach(function(el) {
+    const id = parseInt(el.dataset.msgId, 10);
+    if (id > lastMsgId) lastMsgId = id;
+  });
+
+  const activeStayId = {{ active_stay_id | tojson }};
+
+  function appendBubble(direction, body, meta) {
+    if (!chatEl) return;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ' + direction;
+    bubble.innerHTML = '<div>' + body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+                     + '<div class="meta">' + meta + '</div>';
+    chatEl.appendChild(bubble);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  // ── Polling ──────────────────────────────────────────────────────────────
+  if (activeStayId) {
+    setInterval(function() {
+      fetch('/admin/messages/poll?stay=' + activeStayId + '&after=' + lastMsgId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          // Append any new inbound messages (skip outbound — we already show those optimistically)
+          data.messages.forEach(function(msg) {
+            if (msg.id > lastMsgId) {
+              lastMsgId = msg.id;
+              if (msg.direction === 'inbound') {
+                appendBubble('inbound', msg.body, msg.created_at);
+              }
+            }
+          });
+
+          // Refresh inbox previews
+          data.inbox.forEach(function(conv) {
+            const row = document.querySelector('.inbox-row[data-stay-id="' + conv.stay_id + '"]');
+            if (!row) return;
+            const previewEl = row.querySelector('.inbox-preview');
+            if (previewEl) previewEl.textContent = conv.last_body;
+            const timeEl = row.querySelector('.inbox-time');
+            if (timeEl) timeEl.textContent = conv.last_at;
+          });
+        })
+        .catch(function() { /* silent — network blip */ });
+    }, 3000);
+  }
+
+  // ── Send message ─────────────────────────────────────────────────────────
   if (form && textarea) {
-    // Enter to send, Shift+Enter for newline
     textarea.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -153,25 +203,25 @@
       const body = textarea.value.trim();
       if (!body) return;
 
-      // Instantly show message in chat
-      if (chatEl) {
-        const bubble = document.createElement('div');
-        bubble.className = 'bubble outbound';
-        bubble.innerHTML = '<div>' + body.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div><div class="meta">just now</div>';
-        chatEl.appendChild(bubble);
-        chatEl.scrollTop = chatEl.scrollHeight;
-      }
-
-      // Clear textarea immediately
+      // Optimistically show outbound bubble immediately
+      appendBubble('outbound', body, 'just now');
       textarea.value = '';
 
-      // Send in background
       const formData = new FormData(form);
       formData.set('body', body);
       fetch(form.action, {
         method: 'POST',
         body: formData
-      });
+      }).then(function(r) {
+        // After sending, bump lastMsgId via a poll so we don't double-show our own message
+        return fetch('/admin/messages/poll?stay=' + activeStayId + '&after=' + lastMsgId);
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          data.messages.forEach(function(msg) {
+            if (msg.id > lastMsgId) lastMsgId = msg.id;
+          });
+        })
+        .catch(function() {});
     }
   }
 </script>

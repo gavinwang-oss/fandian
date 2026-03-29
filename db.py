@@ -802,6 +802,22 @@ def list_messages_for_stay(hotel_id: int, stay_id: int):
     )
 
 
+def list_messages_for_stay_after(hotel_id: int, stay_id: int, after_id: int):
+    """Return messages with id > after_id for the given stay (hotel-scoped)."""
+    return _fetchall(
+        """
+        SELECT m.id, m.direction, m.body, m.created_at,
+               g.phone AS guest_phone
+        FROM messages m
+        JOIN stays s ON s.id = m.stay_id
+        JOIN guests g ON g.id = s.guest_id
+        WHERE m.stay_id = ? AND s.hotel_id = ? AND m.id > ?
+        ORDER BY m.id ASC
+        """,
+        (stay_id, hotel_id, after_id),
+    )
+
+
 def list_recent_messages_for_stay(stay_id: int, limit: int = 6):
     return _fetchall(
         """
