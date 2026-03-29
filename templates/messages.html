@@ -155,18 +155,28 @@
     chatEl.scrollTop = chatEl.scrollHeight;
   }
 
+  // Bodies of messages sent optimistically by staff — skip these when they come back from poll
+  const pendingOutbound = new Set();
+
   // ── Polling ──────────────────────────────────────────────────────────────
   if (activeStayId) {
     setInterval(function() {
       fetch('/admin/messages/poll?stay=' + activeStayId + '&after=' + lastMsgId)
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          // Append any new inbound messages (skip outbound — we already show those optimistically)
           data.messages.forEach(function(msg) {
             if (msg.id > lastMsgId) {
               lastMsgId = msg.id;
               if (msg.direction === 'inbound') {
                 appendBubble('inbound', msg.body, msg.created_at);
+              } else {
+                // outbound: skip if it's one we already showed optimistically
+                if (pendingOutbound.has(msg.body)) {
+                  pendingOutbound.delete(msg.body);
+                } else {
+                  // AI-generated reply — show it
+                  appendBubble('outbound', msg.body, msg.created_at);
+                }
               }
             }
           });
@@ -203,7 +213,8 @@
       const body = textarea.value.trim();
       if (!body) return;
 
-      // Optimistically show outbound bubble immediately
+      // Track this body so the poll doesn't double-show it
+      pendingOutbound.add(body);
       appendBubble('outbound', body, 'just now');
       textarea.value = '';
 
