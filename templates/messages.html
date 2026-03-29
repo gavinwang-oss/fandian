@@ -164,6 +164,7 @@
       fetch('/admin/messages/poll?stay=' + activeStayId + '&after=' + lastMsgId)
         .then(function(r) { return r.json(); })
         .then(function(data) {
+          if (data.messages.length) console.log('poll got', data.messages.length, 'new msg(s)', data.messages);
           data.messages.forEach(function(msg) {
             if (msg.id > lastMsgId) {
               lastMsgId = msg.id;
@@ -191,8 +192,8 @@
             if (timeEl) timeEl.textContent = conv.last_at;
           });
         })
-        .catch(function() { /* silent — network blip */ });
-    }, 3000);
+        .catch(function(err) { console.error('poll error', err); });
+    }, 2000);
   }
 
   // ── Send message ─────────────────────────────────────────────────────────
