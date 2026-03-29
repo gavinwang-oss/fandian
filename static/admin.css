@@ -717,11 +717,11 @@ label {
 }
 
 .inbox-header {
-  padding: 20px 20px 16px;
+  padding: 16px 20px 14px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
   flex-shrink: 0;
 }
 
