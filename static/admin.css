@@ -94,6 +94,7 @@ a:hover { text-decoration: underline; }
   padding: 28px 36px 48px;
   width: 100%;
   min-width: 0;
+  position: relative;
 }
 
 /* ── Page user bar (other pages) ── */
@@ -102,6 +103,9 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
   font-size: 13px;
   margin-bottom: 20px;
+  position: absolute;
+  top: 24px;
+  right: 28px;
 }
 
 /* ── Language toggle button ── */
