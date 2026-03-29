@@ -265,7 +265,7 @@ print(f"Seeded {len(HOTEL_INFO)} hotel info entries and {len(HOTEL_DOCS)} knowle
 
 NUM_STAYS = 800
 phone_counter = 2000
-guests_created = stays_created = msgs_created = tasks_created = 0
+guests_created = stays_created = msgs_created = tasks_created = open_tasks_count = 0
 
 for i in range(NUM_STAYS):
     phone = f"+1555{str(phone_counter + i).zfill(7)}"
@@ -338,7 +338,7 @@ for i in range(NUM_STAYS):
 
         if task_summary and random.randint(1, 100) <= task_pct:
             task_dt = msg_dt + timedelta(seconds=random.randint(5, 15))
-            resolved = tasks_created >= 10 or random.random() > 0.02
+            resolved = open_tasks_count >= 10
 
             p = "%s" if IS_POSTGRES else "?"
             if resolved:
@@ -364,6 +364,7 @@ for i in range(NUM_STAYS):
                        VALUES ({p}, 'guest_request', 'open', {p}, {p}, {p}, {p}, {p})""",
                     (stay_id, task_summary, dept, priority, inbound_id, ts(task_dt))
                 )
+                open_tasks_count += 1
             tasks_created += 1
 
 conn.commit()
