@@ -3,7 +3,7 @@
 {% block userbar %}{% endblock %}
 {% block content %}
 
-<div class="messages-layout">
+<div class="messages-layout {% if active_stay_id %}thread-active{% endif %}" id="messages-layout">
 
   <!-- LEFT: inbox list -->
   <div class="inbox-panel">
@@ -49,6 +49,7 @@
   <div class="thread-panel">
     {% if active_stay_id %}
     <div class="thread-header">
+      <button class="mobile-back-btn" id="mobile-back-btn">← {{ t.get('btn_back', 'Back') }}</button>
       <div class="thread-header-top">
         <div class="thread-title">
           <strong>{% if thread_room_number %}Room {{ thread_room_number }}{% else %}Stay #{{ active_stay_id }}{% endif %}</strong>
@@ -130,6 +131,23 @@
 </div>
 
 <script>
+  // ── Mobile back button ──────────────────────────────────────────────────
+  var backBtn = document.getElementById('mobile-back-btn');
+  var layout = document.getElementById('messages-layout');
+  if (backBtn && layout) {
+    backBtn.addEventListener('click', function() {
+      layout.classList.remove('thread-active');
+    });
+  }
+  // On mobile, tapping an inbox row activates thread-active
+  document.querySelectorAll('.inbox-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      if (window.innerWidth <= 768) {
+        layout.classList.add('thread-active');
+      }
+    });
+  });
+
   const chatEl = document.getElementById('chat-messages');
   if (chatEl) { chatEl.scrollTop = chatEl.scrollHeight; }
 

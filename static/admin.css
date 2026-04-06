@@ -1150,3 +1150,252 @@ label {
   color: #999;
   margin-bottom: 14px;
 }
+
+/* ── Mobile header ── */
+.mobile-header {
+  display: none;
+}
+
+/* ── Sidebar close button (mobile only) ── */
+.sidebar-close {
+  display: none;
+}
+
+/* ── Sidebar backdrop ── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 99;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.sidebar-backdrop.visible {
+  display: block;
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════════
+   MOBILE  (≤ 768 px)
+══════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Mobile top bar ── */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #1c1917;
+    padding: 14px 16px;
+    height: 56px;
+  }
+
+  .mobile-logo {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+
+  .hamburger {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 4px;
+  }
+
+  .hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+  }
+
+  /* ── Sidebar: off-screen by default, slides in ── */
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    padding-top: 20px;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: block;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px;
+  }
+
+  .sidebar-close:hover { color: #fff; }
+
+  /* ── Content area ── */
+  .content {
+    padding: 16px 16px 48px;
+  }
+
+  .page-userbar {
+    position: static;
+    text-align: left;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+
+  /* ── Stat grids ── */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .analytics-row {
+    flex-direction: column;
+  }
+
+  .analytics-row > * {
+    width: 100% !important;
+  }
+
+  /* ── Tables: horizontal scroll ── */
+  .panel {
+    overflow-x: auto;
+  }
+
+  .table {
+    min-width: 520px;
+  }
+
+  /* ── Task cards already responsive via auto-fill ── */
+
+  /* ── Info rows ── */
+  .info-row {
+    flex-wrap: wrap;
+  }
+
+  .info-row-key {
+    min-width: unset;
+    width: 100%;
+  }
+
+  /* ── Chat container ── */
+  .chat-container {
+    height: 60vh;
+  }
+
+  /* ── Messages 2-col → single panel ── */
+  .content.messages-page {
+    height: calc(100vh - 56px);
+  }
+
+  .messages-layout {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+
+  /* Inbox panel: visible by default on mobile */
+  .inbox-panel {
+    width: 100%;
+    height: calc(100vh - 56px);
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    transition: transform 0.25s ease;
+  }
+
+  /* Thread panel: hidden off-screen to the right by default */
+  .thread-panel {
+    width: 100%;
+    height: calc(100vh - 56px);
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+  }
+
+  /* When a thread is active: slide inbox left, bring thread in */
+  .messages-layout.thread-active .inbox-panel {
+    transform: translateX(-100%);
+  }
+
+  .messages-layout.thread-active .thread-panel {
+    transform: translateX(0);
+    z-index: 2;
+  }
+
+  /* Back button shown in thread header on mobile */
+  .mobile-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 8px;
+  }
+
+  .mobile-back-btn:hover { opacity: 0.7; }
+
+  /* Thread header meta forms: stack vertically on mobile */
+  .thread-meta-forms {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .thread-meta-input {
+    width: 100% !important;
+  }
+
+  /* Bubble max-width wider on small screens */
+  .bubble {
+    max-width: 85%;
+  }
+
+  /* Reply box textarea */
+  .reply-box textarea {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+}
+
+/* ── Very small phones ── */
+@media (max-width: 380px) {
+  .stat-grid,
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}

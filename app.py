@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -32,6 +35,8 @@ from db import (
     get_staff_user_by_email,
     set_stay_room_number,
     mark_welcome_sent,
+    get_hotel_id_for_line_channel,
+    get_hotel_line_credentials,
 )
 from admin import admin_bp
 from outreach import run_scheduled_outreach, send_welcome as _send_welcome_sms
@@ -201,6 +206,122 @@ def sms_reply():
     except Exception as exc:
         logger.exception("sms_webhook_error", extra={"error": str(exc)})
         return str(MessagingResponse())
+
+
+@app.route("/line/webhook", methods=["POST"])
+def line_webhook():
+    raw_body = request.get_data(as_text=False)
+    data = request.get_json(silent=True) or {}
+
+    # destination = the bot's LINE channel user ID — maps to hotel
+    destination = data.get("destination", "")
+    hotel_id = get_hotel_id_for_line_channel(destination)
+    if not hotel_id:
+        logger.warning("unknown_line_channel", extra={"destination": destination})
+        return "", 200  # LINE always expects 200
+
+    creds = get_hotel_line_credentials(hotel_id)
+    if not creds or not creds.get("secret"):
+        logger.warning("line_credentials_missing", extra={"hotel_id": hotel_id})
+        return "", 200
+
+    # Validate LINE signature
+    signature = request.headers.get("X-Line-Signature", "")
+    if not _validate_line_signature(raw_body, signature, creds["secret"]):
+        logger.warning("line_signature_invalid", extra={"hotel_id": hotel_id})
+        return "", 200
+
+    for event in data.get("events", []):
+        if event.get("type") != "message":
+            continue
+        msg = event.get("message", {})
+        if msg.get("type") != "text":
+            continue
+        line_user_id = event.get("source", {}).get("userId", "")
+        body_text = msg.get("text", "").strip()
+        reply_token = event.get("replyToken", "")
+        if not line_user_id or not body_text:
+            continue
+        try:
+            _handle_line_message(hotel_id, line_user_id, body_text, reply_token, creds["token"])
+        except Exception as exc:
+            logger.exception("line_message_error", extra={"error": str(exc)})
+
+    return "", 200
+
+
+def _validate_line_signature(body: bytes, signature: str, channel_secret: str) -> bool:
+    computed = base64.b64encode(
+        hmac.new(channel_secret.encode("utf-8"), body, hashlib.sha256).digest()
+    ).decode("utf-8")
+    return hmac.compare_digest(computed, signature)
+
+
+def _send_line_reply(reply_token: str, body: str, channel_token: str) -> bool:
+    if not reply_token or not channel_token:
+        return False
+    try:
+        resp = requests.post(
+            "https://api.line.me/v2/bot/message/reply",
+            headers={
+                "Authorization": f"Bearer {channel_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "replyToken": reply_token,
+                "messages": [{"type": "text", "text": body}],
+            },
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.error("line_reply_failed", extra={"status": resp.status_code, "body": resp.text[:200]})
+            return False
+        return True
+    except Exception as exc:
+        logger.error("line_reply_exception", extra={"error": str(exc)})
+        return False
+
+
+def _handle_line_message(hotel_id: int, line_user_id: str, body: str, reply_token: str, channel_token: str) -> None:
+    guest_identifier = f"line:{line_user_id}"
+    guest_id = get_or_create_guest(guest_identifier)
+    logger.info("inbound_line", extra={"guest_id": guest_id, "hotel_id": hotel_id})
+
+    if is_rate_limited(guest_id, hotel_id, app.config["RATE_LIMIT_WINDOW_SECONDS"], app.config["RATE_LIMIT_COUNT"]):
+        logger.info("rate_limited_line", extra={"guest_id": guest_id})
+        return
+
+    log_inbound(guest_id, hotel_id)
+    stay_id = get_or_create_active_stay(guest_id, hotel_id)
+    inbound_id = log_message(stay_id, "inbound", body, source="guest")
+
+    if is_opted_out(guest_id, hotel_id):
+        logger.info("opted_out_suppressed_line", extra={"guest_id": guest_id})
+        return
+
+    hotel_info = get_hotel_info(hotel_id)
+
+    # Room check-in via QR code signal
+    room_number = _parse_room_number(body)
+    if room_number:
+        stay = get_stay(hotel_id, stay_id)
+        already_welcomed = stay and stay.get("welcome_sent_at")
+        set_stay_room_number(hotel_id, stay_id, room_number)
+        if not already_welcomed:
+            hotel = get_hotel(hotel_id)
+            hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
+            reply_text = (
+                f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
+                f"Message us anytime — we're here 24/7 for anything you need during your stay."
+            )
+            log_message(stay_id, "outbound", reply_text, source="ai")
+            mark_welcome_sent(stay_id)
+            _send_line_reply(reply_token, reply_text, channel_token)
+        return
+
+    reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id)
+    log_message(stay_id, "outbound", reply_text, source="ai")
+    _send_line_reply(reply_token, reply_text, channel_token)
 
 
 _ROOM_RE = re.compile(r'^room\s+(\S+)$', re.IGNORECASE)

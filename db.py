@@ -113,6 +113,9 @@ _SCHEMA = [
             name TEXT NOT NULL,
             timezone TEXT DEFAULT 'America/Los_Angeles',
             phone_number TEXT,
+            line_channel_id TEXT,
+            line_channel_token TEXT,
+            line_channel_secret TEXT,
             created_at {TS}
         )
         """,
@@ -290,6 +293,9 @@ def _ensure_migrations():
     # Add missing columns in SQLite for older DBs
     if IS_POSTGRES:
         _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS phone_number TEXT")
+        _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_id TEXT")
+        _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_token TEXT")
+        _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_secret TEXT")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_to_staff_user_id INTEGER")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal'")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notify_guest_when_done BOOLEAN DEFAULT FALSE")
@@ -360,6 +366,12 @@ def _ensure_migrations():
     names = {row["name"] for row in cols}
     if "phone_number" not in names:
         cur.execute("ALTER TABLE hotels ADD COLUMN phone_number TEXT")
+    if "line_channel_id" not in names:
+        cur.execute("ALTER TABLE hotels ADD COLUMN line_channel_id TEXT")
+    if "line_channel_token" not in names:
+        cur.execute("ALTER TABLE hotels ADD COLUMN line_channel_token TEXT")
+    if "line_channel_secret" not in names:
+        cur.execute("ALTER TABLE hotels ADD COLUMN line_channel_secret TEXT")
 
     # knowledge_suggestions table (added for self-expanding KB)
     existing_tables = {row[0] for row in cur.execute(
@@ -513,6 +525,36 @@ def _normalize_phone(value: str) -> str:
     if value.startswith("+") and digits:
         return f"+{digits}"
     return value.strip()
+
+
+def get_hotel_id_for_line_channel(line_channel_id: str):
+    """Return hotel_id matching the given LINE channel user ID (destination field)."""
+    if not line_channel_id:
+        return None
+    row = _fetchone("SELECT id FROM hotels WHERE line_channel_id = ?", (line_channel_id,))
+    return int(row["id"]) if row else None
+
+
+def get_hotel_line_credentials(hotel_id: int):
+    """Return LINE channel credentials for a hotel, or None if not configured."""
+    row = _fetchone(
+        "SELECT line_channel_id, line_channel_token, line_channel_secret FROM hotels WHERE id = ?",
+        (hotel_id,),
+    )
+    if not row:
+        return None
+    return {
+        "channel_id": row["line_channel_id"],
+        "token": row["line_channel_token"],
+        "secret": row["line_channel_secret"],
+    }
+
+
+def update_hotel_line_credentials(hotel_id: int, channel_id: str, token: str, secret: str) -> None:
+    _execute(
+        "UPDATE hotels SET line_channel_id = ?, line_channel_token = ?, line_channel_secret = ? WHERE id = ?",
+        (channel_id or None, token or None, secret or None, hotel_id),
+    )
 
 
 def set_hotel_phone(hotel_id: int, phone_number: str) -> None:
@@ -703,12 +745,13 @@ def get_stays_needing_outreach():
                s.checkout_reminder_sent_at, s.post_stay_sent_at,
                g.phone AS guest_phone,
                h.phone_number AS hotel_phone,
-               h.name AS hotel_name
+               h.name AS hotel_name,
+               h.line_channel_token AS hotel_line_token
         FROM stays s
         JOIN guests g ON g.id = s.guest_id
         JOIN hotels h ON h.id = s.hotel_id
         WHERE s.check_out_date IS NOT NULL
-          AND h.phone_number IS NOT NULL
+          AND (h.phone_number IS NOT NULL OR h.line_channel_token IS NOT NULL)
           AND g.phone IS NOT NULL
           AND (s.checkout_reminder_sent_at IS NULL OR s.post_stay_sent_at IS NULL)
         """,

@@ -9,6 +9,7 @@ Triggered by:
 
 import logging
 import os
+import requests
 from datetime import datetime, date, timedelta
 
 from twilio.rest import Client
@@ -44,6 +45,41 @@ def _twilio_client():
     return Client(sid, token)
 
 
+def _is_line_guest(phone: str) -> bool:
+    return isinstance(phone, str) and phone.startswith("line:")
+
+
+def _line_user_id(phone: str) -> str:
+    """Strip the 'line:' prefix to get the raw LINE user ID."""
+    return phone[5:]
+
+
+def _send_line_push(line_user_id: str, body: str, channel_token: str) -> bool:
+    """Send a proactive (push) message to a LINE user."""
+    if not line_user_id or not channel_token:
+        return False
+    try:
+        resp = requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Authorization": f"Bearer {channel_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "to": line_user_id,
+                "messages": [{"type": "text", "text": body}],
+            },
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.error("line_push_failed", extra={"status": resp.status_code, "to": line_user_id})
+            return False
+        return True
+    except Exception as exc:
+        logger.error("line_push_exception", extra={"error": str(exc)})
+        return False
+
+
 def _send_sms(to: str, from_: str, body: str) -> bool:
     client = _twilio_client()
     if not client:
@@ -58,14 +94,18 @@ def _send_sms(to: str, from_: str, body: str) -> bool:
 
 
 def send_welcome(stay_id: int, room_number: str, hotel_name: str,
-                 from_number: str, to_number: str) -> None:
-    """Send a welcome message immediately after check-in."""
+                 from_number: str, to_number: str, line_token: str = None) -> None:
+    """Send a welcome message immediately after check-in (SMS or LINE)."""
     room_str = f"Room {room_number}" if room_number else "your room"
     body = (
         f"Welcome to {hotel_name}! You're all set in {room_str}. "
         f"Text us anytime — we're here 24/7 for anything you need during your stay."
     )
-    if _send_sms(to_number, from_number, body):
+    if _is_line_guest(to_number) and line_token:
+        sent = _send_line_push(_line_user_id(to_number), body, line_token)
+    else:
+        sent = _send_sms(to_number, from_number, body)
+    if sent:
         log_message(stay_id, "outbound", body, source="system")
         logger.info("welcome_sent", extra={"stay_id": stay_id, "room": room_number})
 
@@ -91,8 +131,10 @@ def run_scheduled_outreach() -> None:
         guest_phone = s["guest_phone"]
         hotel_phone = s["hotel_phone"]
         hotel_name  = s["hotel_name"]
+        line_token  = s.get("hotel_line_token")
         room        = s["room_number"]
         room_str    = f"Room {room}" if room else "your room"
+        is_line     = _is_line_guest(guest_phone)
 
         checkout_dt = _parse_checkout(s["check_out_date"])
         if not checkout_dt:
@@ -109,7 +151,11 @@ def run_scheduled_outreach() -> None:
                 f"{' at ' + checkout_display if checkout_display != 'tomorrow' else ''}. "
                 f"Need a late checkout or anything else before you go? Just reply here."
             )
-            if _send_sms(guest_phone, hotel_phone, body):
+            if is_line and line_token:
+                sent = _send_line_push(_line_user_id(guest_phone), body, line_token)
+            else:
+                sent = _send_sms(guest_phone, hotel_phone, body)
+            if sent:
                 log_message(stay_id, "outbound", body, source="system")
                 mark_checkout_reminder_sent(stay_id)
                 logger.info("checkout_reminder_sent", extra={"stay_id": stay_id})
@@ -120,7 +166,11 @@ def run_scheduled_outreach() -> None:
                 f"Thanks for staying at {hotel_name}! We hope you had a great visit. "
                 f"How was your stay? Reply with a number from 1 (poor) to 5 (excellent)."
             )
-            if _send_sms(guest_phone, hotel_phone, body):
+            if is_line and line_token:
+                sent = _send_line_push(_line_user_id(guest_phone), body, line_token)
+            else:
+                sent = _send_sms(guest_phone, hotel_phone, body)
+            if sent:
                 log_message(stay_id, "outbound", body, source="system")
                 mark_post_stay_sent(stay_id)
                 logger.info("post_stay_sent", extra={"stay_id": stay_id})

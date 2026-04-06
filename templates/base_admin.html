@@ -9,8 +9,19 @@
     <link rel="stylesheet" href="/static/admin.css" />
   </head>
   <body>
+    <!-- Mobile header bar -->
+    <div class="mobile-header">
+      <button class="hamburger" id="hamburger-btn" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="mobile-logo">Fandian</span>
+    </div>
+    <!-- Sidebar overlay backdrop -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <div class="layout">
-      <aside class="sidebar">
+      <aside class="sidebar" id="sidebar">
+        <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">✕</button>
         <h1>Fandian</h1>
         <nav class="nav">
           <a href="/admin/checkin" class="{% if active_page=='checkin' %}active{% endif %}">{{ t['nav_checkin'] }}</a>
@@ -41,5 +52,26 @@
       </main>
     </div>
     <script src="/static/admin.js"></script>
+    <script>
+      (function() {
+        var btn = document.getElementById('hamburger-btn');
+        var close = document.getElementById('sidebar-close');
+        var backdrop = document.getElementById('sidebar-backdrop');
+        var sidebar = document.getElementById('sidebar');
+        function openMenu() {
+          sidebar.classList.add('open');
+          backdrop.classList.add('visible');
+          document.body.style.overflow = 'hidden';
+        }
+        function closeMenu() {
+          sidebar.classList.remove('open');
+          backdrop.classList.remove('visible');
+          document.body.style.overflow = '';
+        }
+        if (btn) btn.addEventListener('click', openMenu);
+        if (close) close.addEventListener('click', closeMenu);
+        if (backdrop) backdrop.addEventListener('click', closeMenu);
+      })();
+    </script>
   </body>
 </html>

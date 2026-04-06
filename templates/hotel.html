@@ -161,4 +161,42 @@
   </form>
 </div>
 
+{# ── Section 3: LINE Integration ── #}
+<div class="section-label" style="margin-top:40px;">LINE Messaging Integration</div>
+<p class="section-hint">Connect a LINE Official Account so guests can message via LINE. Get these credentials from the <a href="https://developers.line.biz/console/" target="_blank" rel="noopener">LINE Developers Console</a>.</p>
+
+<div class="panel">
+  {% if line_creds and line_creds.channel_id %}
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+      <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#16a34a;"></span>
+      <span style="font-size:13px; color:#16a34a; font-weight:600;">LINE connected</span>
+      <span style="font-size:12px; color:var(--muted);">Channel ID: {{ line_creds.channel_id }}</span>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:16px;">
+      Webhook URL to enter in LINE Developers Console:<br>
+      <code style="background:var(--surface); padding:4px 8px; border-radius:4px; font-size:12px;">{{ request.host_url }}line/webhook</code>
+    </p>
+  {% else %}
+    <p style="color:var(--muted); font-size:13px; margin-bottom:16px;">No LINE account connected yet.</p>
+  {% endif %}
+
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="action" value="save_line_credentials" />
+    <div class="form-group">
+      <label>Channel User ID <span style="font-size:11px; color:var(--muted);">(found in LINE Developers Console → Basic settings → Your user ID)</span></label>
+      <input class="input" type="text" name="line_channel_id" value="{{ line_creds.channel_id or '' }}" placeholder="U1234abcd..." />
+    </div>
+    <div class="form-group">
+      <label>Channel Access Token <span style="font-size:11px; color:var(--muted);">(Messaging API → Channel access token)</span></label>
+      <input class="input" type="text" name="line_channel_token" value="{{ line_creds.token or '' }}" placeholder="Long-lived channel access token" />
+    </div>
+    <div class="form-group">
+      <label>Channel Secret <span style="font-size:11px; color:var(--muted);">(Basic settings → Channel secret)</span></label>
+      <input class="input" type="password" name="line_channel_secret" value="{{ line_creds.secret or '' }}" placeholder="Channel secret" />
+    </div>
+    <button class="btn" type="submit">Save LINE Credentials</button>
+  </form>
+</div>
+
 {% endblock %}

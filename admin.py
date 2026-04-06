@@ -43,6 +43,8 @@ from db import (
     list_knowledge_suggestions,
     update_knowledge_suggestion_status,
     get_analytics,
+    get_hotel_line_credentials,
+    update_hotel_line_credentials,
 )
 from werkzeug.security import generate_password_hash
 
@@ -387,7 +389,7 @@ def admin_checkin():
             if check_out_date:
                 set_stay_checkout_date(hotel_id, stay_id, check_out_date)
 
-            # Send welcome SMS
+            # Send welcome message (SMS or LINE depending on guest identifier)
             hotel = get_hotel(hotel_id)
             hotel_info = get_hotel_info(hotel_id)
             hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
@@ -397,15 +399,22 @@ def admin_checkin():
                 f"Welcome to {hotel_name}! You're all set in {room_str}. "
                 f"Text us anytime — we're here 24/7 for anything you need during your stay."
             )
-            if from_number:
-                try:
-                    from outreach import _send_sms
-                    from db import log_message as _log_msg
-                    if _send_sms(phone, from_number, body):
-                        _log_msg(stay_id, "outbound", body)
-                        mark_welcome_sent(stay_id)
-                except Exception as exc:
-                    logger.error("checkin_welcome_sms_failed", extra={"error": str(exc)})
+            try:
+                from outreach import _send_sms, _is_line_guest, _send_line_push, _line_user_id
+                from db import log_message as _log_msg
+                sent = False
+                if _is_line_guest(phone):
+                    line_creds = get_hotel_line_credentials(hotel_id) or {}
+                    line_token = line_creds.get("token")
+                    if line_token:
+                        sent = _send_line_push(_line_user_id(phone), body, line_token)
+                elif from_number:
+                    sent = _send_sms(phone, from_number, body)
+                if sent:
+                    _log_msg(stay_id, "outbound", body)
+                    mark_welcome_sent(stay_id)
+            except Exception as exc:
+                logger.error("checkin_welcome_failed", extra={"error": str(exc)})
 
             return redirect(url_for("admin.admin_messages") + f"?stay={stay_id}")
 
@@ -496,6 +505,13 @@ def admin_hotel():
                 update_knowledge_suggestion_status(suggestion_id, "dismissed")
             return redirect(url_for("admin.admin_hotel"))
 
+        if action == "save_line_credentials":
+            channel_id = request.form.get("line_channel_id", "").strip()
+            token = request.form.get("line_channel_token", "").strip()
+            secret = request.form.get("line_channel_secret", "").strip()
+            update_hotel_line_credentials(hotel_id, channel_id, token, secret)
+            return redirect(url_for("admin.admin_hotel"))
+
         return redirect(url_for("admin.admin_hotel"))
 
     # Pre-fill edit forms
@@ -513,6 +529,7 @@ def admin_hotel():
         edit_doc = get_hotel_doc(hotel_id, int(edit_doc_id))
 
     csrf_token = _ensure_csrf_token()
+    line_creds = get_hotel_line_credentials(hotel_id) or {}
     return render_template(
         "hotel.html",
         info_rows=list_hotel_info(hotel_id),
@@ -521,6 +538,7 @@ def admin_hotel():
         csrf_token=csrf_token,
         edit_info_row=edit_info_row,
         edit_doc=edit_doc,
+        line_creds=line_creds,
         title="Hotel Info & Knowledge",
         active_page="hotel",
     )
