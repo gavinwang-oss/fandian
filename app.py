@@ -374,12 +374,14 @@ def llm_fallback(user_message: str, hotel_info: dict, hotel_id: int, stay_id: in
     model = app.config["OPENAI_MODEL"]
 
     instructions = (
-        "You are an SMS concierge for a hotel. Answer concisely (1-3 sentences). "
-        "Use the provided hotel info and knowledge snippets when relevant, but you may also use general knowledge. "
-        "Never invent hotel policies, hours, pricing, or availability. If the answer depends on hotel-specific info "
-        "that is not provided, say you'll check with staff or ask a brief clarifying question. "
+        "You are a concierge for a hotel. Answer concisely (1-3 sentences). "
+        "Use ONLY the provided hotel info and knowledge snippets for any hotel-specific facts. "
+        "NEVER invent or guess hotel-specific information including: address, location, country, city, "
+        "hours, policies, pricing, availability, amenities, or any other property-specific detail. "
+        "If hotel-specific info is not in the provided data, say: 'I don't have that information on hand — "
+        "please contact the front desk directly for accurate details.' "
         "If the guest asks for something that requires staff (towels, water, valet, late checkout, complaints), "
-        "acknowledge and say staff will assist. If you don't know, ask a brief clarifying question or say you'll connect them to staff."
+        "acknowledge and say staff will assist."
     )
 
     info_lines = "\n".join([f"- {k}: {v}" for k, v in hotel_info.items()])
