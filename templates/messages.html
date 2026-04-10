@@ -54,6 +54,7 @@
         <div class="thread-title">
           <strong>{% if thread_room_number %}Room {{ thread_room_number }}{% else %}Stay #{{ active_stay_id }}{% endif %}</strong>
           {% if thread_guest_phone %}<span class="thread-phone">{{ thread_guest_phone }}</span>{% endif %}
+          <a href="/admin/stay/{{ active_stay_id }}/download" class="download-transcript-btn" title="Download conversation">↓ Download</a>
         </div>
         <div class="thread-meta-forms">
           <form method="post" action="/admin/stay/{{ active_stay_id }}" class="thread-meta-form">

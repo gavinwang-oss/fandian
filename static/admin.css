@@ -900,6 +900,21 @@ label {
   margin-left: 8px;
 }
 
+.download-transcript-btn {
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  margin-left: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.download-transcript-btn:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
 .thread-meta-forms {
   display: flex;
   gap: 8px;

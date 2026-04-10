@@ -292,6 +292,43 @@ def admin_stay(stay_id: int):
     )
 
 
+@admin_bp.route("/admin/stay/<int:stay_id>/download")
+@login_required
+def admin_stay_download(stay_id: int):
+    from flask import Response
+    hotel_id = session.get("hotel_id")
+    stay = get_stay(hotel_id, stay_id)
+    if not stay:
+        abort(404)
+    rows = list_messages_for_stay(hotel_id, stay_id)
+    hotel = get_hotel(hotel_id)
+    hotel_name = hotel["name"] if hotel else "Hotel"
+    room = stay.get("room_number") or f"Stay #{stay_id}"
+
+    lines = [f"Conversation Export — {hotel_name}", f"Room: {room}", ""]
+    for r in rows:
+        direction = r["direction"]
+        source = r.get("source", "")
+        if direction == "inbound":
+            sender = "Guest"
+        elif source == "staff":
+            sender = "Staff"
+        elif source == "system":
+            sender = "System"
+        else:
+            sender = "AI"
+        ts = r["created_at"][:16] if r["created_at"] else ""
+        lines.append(f"[{ts}] {sender}: {r['body']}")
+
+    content = "\n".join(lines) + "\n"
+    filename = f"conversation-stay-{stay_id}.txt"
+    return Response(
+        content,
+        mimetype="text/plain",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @admin_bp.route("/admin/stay/<int:stay_id>/reply", methods=["POST"])
 @login_required
 def admin_stay_reply(stay_id: int):
