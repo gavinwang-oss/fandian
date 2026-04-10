@@ -355,7 +355,7 @@ def admin_stay_reply(stay_id: int):
 
     to_number = get_guest_phone_for_stay(hotel_id, stay_id)
     if to_number:
-        _send_sms(to_number, body)
+        _send_reply_to_guest(hotel_id, to_number, body)
         logger.info("staff_reply_sent", extra={"stay_id": stay_id})
 
     # Trigger knowledge suggestion in the background (if we have a question)
@@ -640,3 +640,32 @@ def _send_sms(to_number: str, body: str):
         client.messages.create(to=to_number, from_=from_number, body=body)
     except Exception as exc:
         logger.exception("twilio_send_error", extra={"error": str(exc)})
+
+
+def _send_line_push(line_user_id: str, body: str, channel_token: str):
+    import requests as _requests
+    try:
+        resp = _requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Authorization": f"Bearer {channel_token}",
+                "Content-Type": "application/json",
+            },
+            json={"to": line_user_id, "messages": [{"type": "text", "text": body}]},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.error("line_push_failed", extra={"status": resp.status_code})
+    except Exception as exc:
+        logger.exception("line_push_error", extra={"error": str(exc)})
+
+
+def _send_reply_to_guest(hotel_id: int, to_number: str, body: str):
+    """Send a staff reply via the correct channel (LINE or SMS)."""
+    if to_number and to_number.startswith("line:"):
+        from db import get_hotel_line_credentials
+        creds = get_hotel_line_credentials(hotel_id)
+        if creds and creds.get("token"):
+            _send_line_push(to_number[5:], body, creds["token"])
+    else:
+        _send_sms(to_number, body)
