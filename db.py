@@ -833,7 +833,7 @@ def list_conversations_for_hotel(hotel_id: int, limit: int = 100):
 def list_messages_for_stay(hotel_id: int, stay_id: int):
     return _fetchall(
         """
-        SELECT m.id, m.direction, m.body, m.created_at,
+        SELECT m.id, m.direction, m.body, m.created_at, m.source,
                g.phone AS guest_phone
         FROM messages m
         JOIN stays s ON s.id = m.stay_id
