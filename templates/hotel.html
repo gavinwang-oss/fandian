@@ -161,7 +161,33 @@
   </form>
 </div>
 
-{# ── Section 3: LINE Integration ── #}
+{# ── Section 3: Staff Language ── #}
+<div class="section-label" style="margin-top:40px;">Staff Language</div>
+<p class="section-hint">Task summaries will be automatically translated into this language so your staff can read them, regardless of what language the guest used.</p>
+
+<div class="panel">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    <input type="hidden" name="action" value="save_staff_language" />
+    <div class="form-group">
+      <label>Default staff language</label>
+      <select class="input" name="staff_language">
+        <option value="en" {% if staff_language == 'en' %}selected{% endif %}>English</option>
+        <option value="zh-TW" {% if staff_language == 'zh-TW' %}selected{% endif %}>Traditional Chinese (繁體中文)</option>
+        <option value="zh-CN" {% if staff_language == 'zh-CN' %}selected{% endif %}>Simplified Chinese (简体中文)</option>
+        <option value="ja" {% if staff_language == 'ja' %}selected{% endif %}>Japanese (日本語)</option>
+        <option value="ko" {% if staff_language == 'ko' %}selected{% endif %}>Korean (한국어)</option>
+        <option value="th" {% if staff_language == 'th' %}selected{% endif %}>Thai (ภาษาไทย)</option>
+        <option value="es" {% if staff_language == 'es' %}selected{% endif %}>Spanish (Español)</option>
+        <option value="fr" {% if staff_language == 'fr' %}selected{% endif %}>French (Français)</option>
+        <option value="de" {% if staff_language == 'de' %}selected{% endif %}>German (Deutsch)</option>
+      </select>
+    </div>
+    <button class="btn" type="submit">Save Language</button>
+  </form>
+</div>
+
+{# ── Section 4: LINE Integration ── #}
 <div class="section-label" style="margin-top:40px;">LINE Messaging Integration</div>
 <p class="section-hint">Connect a LINE Official Account so guests can message via LINE. Get these credentials from the <a href="https://developers.line.biz/console/" target="_blank" rel="noopener">LINE Developers Console</a>.</p>
 

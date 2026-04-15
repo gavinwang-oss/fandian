@@ -45,6 +45,7 @@ from db import (
     get_analytics,
     get_hotel_line_credentials,
     update_hotel_line_credentials,
+    update_hotel_staff_language,
 )
 from werkzeug.security import generate_password_hash
 
@@ -549,6 +550,11 @@ def admin_hotel():
             update_hotel_line_credentials(hotel_id, channel_id, token, secret)
             return redirect(url_for("admin.admin_hotel"))
 
+        if action == "save_staff_language":
+            language = request.form.get("staff_language", "en").strip()
+            update_hotel_staff_language(hotel_id, language)
+            return redirect(url_for("admin.admin_hotel"))
+
         return redirect(url_for("admin.admin_hotel"))
 
     # Pre-fill edit forms
@@ -567,6 +573,8 @@ def admin_hotel():
 
     csrf_token = _ensure_csrf_token()
     line_creds = get_hotel_line_credentials(hotel_id) or {}
+    hotel = get_hotel(hotel_id)
+    staff_language = (hotel.get("staff_language") or "en") if hotel else "en"
     return render_template(
         "hotel.html",
         info_rows=list_hotel_info(hotel_id),
@@ -576,6 +584,7 @@ def admin_hotel():
         edit_info_row=edit_info_row,
         edit_doc=edit_doc,
         line_creds=line_creds,
+        staff_language=staff_language,
         title="Hotel Info & Knowledge",
         active_page="hotel",
     )

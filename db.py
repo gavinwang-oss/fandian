@@ -116,6 +116,7 @@ _SCHEMA = [
             line_channel_id TEXT,
             line_channel_token TEXT,
             line_channel_secret TEXT,
+            staff_language TEXT DEFAULT 'en',
             created_at {TS}
         )
         """,
@@ -296,6 +297,7 @@ def _ensure_migrations():
         _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_id TEXT")
         _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_token TEXT")
         _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS line_channel_secret TEXT")
+        _execute("ALTER TABLE hotels ADD COLUMN IF NOT EXISTS staff_language TEXT DEFAULT 'en'")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_to_staff_user_id INTEGER")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal'")
         _execute("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notify_guest_when_done BOOLEAN DEFAULT FALSE")
@@ -372,6 +374,8 @@ def _ensure_migrations():
         cur.execute("ALTER TABLE hotels ADD COLUMN line_channel_token TEXT")
     if "line_channel_secret" not in names:
         cur.execute("ALTER TABLE hotels ADD COLUMN line_channel_secret TEXT")
+    if "staff_language" not in names:
+        cur.execute("ALTER TABLE hotels ADD COLUMN staff_language TEXT DEFAULT 'en'")
 
     # knowledge_suggestions table (added for self-expanding KB)
     existing_tables = {row[0] for row in cur.execute(
@@ -563,9 +567,13 @@ def set_hotel_phone(hotel_id: int, phone_number: str) -> None:
 
 def get_hotel(hotel_id: int):
     return _fetchone(
-        "SELECT id, name, phone_number, timezone FROM hotels WHERE id = ?",
+        "SELECT id, name, phone_number, timezone, staff_language FROM hotels WHERE id = ?",
         (hotel_id,),
     )
+
+
+def update_hotel_staff_language(hotel_id: int, language: str) -> None:
+    _execute("UPDATE hotels SET staff_language = ? WHERE id = ?", (language, hotel_id))
 
 
 def get_default_hotel_id() -> int:

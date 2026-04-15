@@ -173,6 +173,8 @@ def sms_reply():
             return str(MessagingResponse())
 
         hotel_info = get_hotel_info(hotel_id)
+        hotel = get_hotel(hotel_id)
+        staff_language = (hotel.get("staff_language") or "en") if hotel else "en"
 
         # Room check-in via QR code: "Room 402" → set room number, send welcome (once only)
         room_number = _parse_room_number(body)
@@ -181,7 +183,6 @@ def sms_reply():
             already_welcomed = stay and stay.get("welcome_sent_at")
             set_stay_room_number(hotel_id, stay_id, room_number)
             if not already_welcomed:
-                hotel = get_hotel(hotel_id)
                 hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
                 reply_text = (
                     f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
@@ -197,7 +198,7 @@ def sms_reply():
                 logger.info("room_checkin_duplicate_suppressed", extra={"stay_id": stay_id, "room": room_number})
                 return str(MessagingResponse())
 
-        reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id)
+        reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id, staff_language)
 
         log_message(stay_id, "outbound", reply_text, source="ai")
         resp = MessagingResponse()
@@ -300,6 +301,8 @@ def _handle_line_message(hotel_id: int, line_user_id: str, body: str, reply_toke
         return
 
     hotel_info = get_hotel_info(hotel_id)
+    hotel = get_hotel(hotel_id)
+    staff_language = (hotel.get("staff_language") or "en") if hotel else "en"
 
     # Room check-in via QR code signal
     room_number = _parse_room_number(body)
@@ -308,7 +311,6 @@ def _handle_line_message(hotel_id: int, line_user_id: str, body: str, reply_toke
         already_welcomed = stay and stay.get("welcome_sent_at")
         set_stay_room_number(hotel_id, stay_id, room_number)
         if not already_welcomed:
-            hotel = get_hotel(hotel_id)
             hotel_name = hotel_info.get("hotel_name") or (hotel["name"] if hotel else "the hotel")
             reply_text = (
                 f"Welcome to {hotel_name}! You're all set in Room {room_number}. "
@@ -319,7 +321,7 @@ def _handle_line_message(hotel_id: int, line_user_id: str, body: str, reply_toke
             _send_line_reply(reply_token, reply_text, channel_token)
         return
 
-    reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id)
+    reply_text = route_message(body, hotel_info, hotel_id, stay_id, inbound_id, staff_language)
     log_message(stay_id, "outbound", reply_text, source="ai")
     _send_line_reply(reply_token, reply_text, channel_token)
 
@@ -333,9 +335,9 @@ def _parse_room_number(body: str) -> str | None:
     return m.group(1) if m else None
 
 
-def route_message(body: str, hotel_info: dict, hotel_id: int, stay_id: int, inbound_message_id: int) -> str:
+def route_message(body: str, hotel_info: dict, hotel_id: int, stay_id: int, inbound_message_id: int, staff_language: str = "en") -> str:
     # LLM decision: reply vs task
-    decision = decide_action_llm(body, hotel_info, stay_id, hotel_id)
+    decision = decide_action_llm(body, hotel_info, stay_id, hotel_id, staff_language)
     if decision:
         action = decision.get("action")
         if action == "task":
@@ -567,7 +569,7 @@ def _parse_llm_json(text: str) -> dict | None:
     return parsed
 
 
-def decide_action_llm(user_message: str, hotel_info: dict, stay_id: int, hotel_id: int) -> dict | None:
+def decide_action_llm(user_message: str, hotel_info: dict, stay_id: int, hotel_id: int, staff_language: str = "en") -> dict | None:
     api_key = app.config["OPENAI_API_KEY"]
     if not api_key:
         return None
@@ -590,6 +592,8 @@ def decide_action_llm(user_message: str, hotel_info: dict, stay_id: int, hotel_i
         "NEVER create a task for: greetings, thanks, acknowledgments, questions about staff names, "
         "meta questions about the AI, jokes, gibberish, or anything not a real hotel request.\n"
         "Do NOT invent hotel policies or hours not provided.\n"
+        f"IMPORTANT: Always write the task_summary in {staff_language} regardless of the guest's message language. "
+        "The task_summary is for hotel staff, so it must be in their language.\n"
         "Always include a polite reply. Respond with ONLY valid JSON."
     )
     schema = {
