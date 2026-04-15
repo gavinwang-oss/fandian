@@ -317,7 +317,7 @@ def admin_stay_download(stay_id: int):
             sender = "System"
         else:
             sender = "AI"
-        ts = r["created_at"][:16] if r["created_at"] else ""
+        ts = str(r["created_at"])[:16] if r["created_at"] else ""
         lines.append(f"[{ts}] {sender}: {r['body']}")
 
     content = "\n".join(lines) + "\n"
