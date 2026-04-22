@@ -401,13 +401,24 @@ def admin_checkin():
             check_out_date = None
 
         # Normalize phone to E.164 using phonenumbers library
+        # Derive default region from hotel timezone
+        _tz_to_region = {
+            "Asia/Taipei": "TW", "Asia/Tokyo": "JP", "Asia/Seoul": "KR",
+            "Asia/Bangkok": "TH", "Asia/Singapore": "SG", "Asia/Hong_Kong": "HK",
+            "Asia/Shanghai": "CN", "Asia/Jakarta": "ID", "Europe/London": "GB",
+            "Europe/Paris": "FR", "Europe/Berlin": "DE", "Australia/Sydney": "AU",
+        }
+        _hotel = get_hotel(hotel_id)
+        _tz = (_hotel.get("timezone") or "America/Los_Angeles") if _hotel else "America/Los_Angeles"
+        _region = next((v for k, v in _tz_to_region.items() if _tz.startswith(k.split("/")[0] + "/") and k == _tz), "US")
+
         phone = None
         if not raw_phone:
             error = "Phone number is required."
         else:
             try:
                 import phonenumbers
-                parsed = phonenumbers.parse(raw_phone, "US")
+                parsed = phonenumbers.parse(raw_phone, _region)
                 if phonenumbers.is_valid_number(parsed):
                     phone = phonenumbers.format_number(
                         parsed, phonenumbers.PhoneNumberFormat.E164
@@ -415,7 +426,7 @@ def admin_checkin():
                 else:
                     error = "Invalid phone number. Check the number and try again."
             except Exception:
-                error = "Could not parse phone number. For international numbers include the country code (e.g. +44 7911 123456)."
+                error = "Could not parse phone number. For international numbers include the country code (e.g. +886 912 345678)."
 
         if not error and not phone:
             error = "Phone number is required."
