@@ -22,38 +22,7 @@ Python, Flask, OpenAI API (GPT-4.1 + text-embedding-3-small), Twilio, SQLite / P
 
 ## Setup
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Create a `.env` file:
-
-```
-FLASK_SECRET_KEY=your_secret
-DATABASE_URL=sqlite:///hotel.db
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4.1
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-TWILIO_SID=...
-TWILIO_TOKEN=...
-TWILIO_NUMBER=...
-STOP_RESPONSE=You have been opted out and will no longer receive messages. Reply HELP for assistance.
-HELP_RESPONSE=Hotel Concierge support: reply with your request, or reply STOP to opt out.
-RATE_LIMIT_COUNT=10
-RATE_LIMIT_WINDOW_SECONDS=300
-BOOTSTRAP_ADMIN_EMAIL=manager@example.com
-BOOTSTRAP_ADMIN_PASSWORD=change-me
-BOOTSTRAP_HOTEL_NAME=Demo Hotel
-BOOTSTRAP_HOTEL_PHONE=+18885551234
-```
-
-```bash
-python3 app.py
-```
-
-Login at `http://localhost:5000/login`.
+Requires Python 3.10+, a Twilio account, and an OpenAI API key. See `.env.example` for required environment variables. The app is deployed and running in production.
 
 ## Admin Routes
 
