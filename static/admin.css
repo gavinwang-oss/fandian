@@ -1,10 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg:        #f6f8fb;
+  --bg:        #ffffff;
   --panel:     #ffffff;
   --text:      #1a1f36;
-  --muted:     #687385;
+  --muted:     #6a7383;
+  --muted-2:   #87909f;
   --border:    #e3e8ee;
   --accent:    #2563eb;
   --accent-hover: #1d4ed8;
@@ -13,8 +14,8 @@
   --danger:    #dc2626;
   --success:   #16a34a;
   --warning:   #d97706;
-  --shadow:    0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.05);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow:    0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.06);
+  --shadow-sm: none;
   --radius:    8px;
   --radius-sm: 6px;
   --radius-pill: 999px;
@@ -37,7 +38,7 @@ a:hover { text-decoration: underline; }
 /* ── Layout ── */
 .layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 260px 1fr;
   min-height: 100vh;
 }
 
@@ -80,27 +81,27 @@ a:hover { text-decoration: underline; }
   display: block;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  color: #4f566b;
+  color: #414552;
   font-size: 14px;
   font-weight: 500;
   transition: background 0.15s, color 0.15s;
 }
 
 .nav a:hover {
-  background: rgba(26,31,54,0.05);
+  background: rgba(26,31,54,0.04);
   color: var(--text);
   text-decoration: none;
 }
 
 .nav a.active {
-  background: var(--accent-soft);
+  background: transparent;
   color: var(--accent);
   font-weight: 600;
 }
 
 /* ── Main content ── */
 .content {
-  padding: 28px 36px 48px;
+  padding: 32px 48px 64px;
   width: 100%;
   min-width: 0;
   position: relative;
@@ -160,11 +161,12 @@ a:hover { text-decoration: underline; }
 .btn:hover { background: var(--accent-hover); text-decoration: none; color: var(--accent-fg); }
 
 .btn.secondary {
-  background: #f3f4f6;
-  color: #374151;
+  background: #ffffff;
+  color: #414552;
+  border: 1px solid var(--border);
 }
 
-.btn.secondary:hover { background: #e5e7eb; }
+.btn.secondary:hover { background: #f6f8fa; }
 
 .btn-sm {
   padding: 5px 12px;
@@ -182,7 +184,12 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px;
-  box-shadow: var(--shadow);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #414552;
 }
 
 .panel h2 {
@@ -317,7 +324,6 @@ label {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 24px;
-  box-shadow: var(--shadow-sm);
 }
 
 .stat-card .stat-label {
@@ -330,10 +336,10 @@ label {
 }
 
 .stat-card .stat-value {
-  font-size: 32px;
-  font-weight: 800;
-  letter-spacing: -1px;
-  line-height: 1;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
 }
 
 .stat-card.stat-urgent .stat-value { color: var(--danger); }
@@ -364,22 +370,19 @@ label {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
-  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.task-card:hover { box-shadow: var(--shadow); }
+.task-card:hover { border-color: #c9d2dc; }
 
 .task-card.priority-urgent {
-  box-shadow: inset 3px 0 0 var(--danger), var(--shadow-sm);
-  background: #fffafa;
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 
 .task-card.priority-high {
-  box-shadow: inset 3px 0 0 var(--warning), var(--shadow-sm);
-  background: #fffcf5;
+  box-shadow: inset 3px 0 0 var(--warning);
 }
 
 .task-card.status-done {
@@ -474,7 +477,6 @@ label {
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--panel);
-  box-shadow: var(--shadow-sm);
 }
 
 .thread-header {
@@ -501,7 +503,6 @@ label {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   height: 72vh;
@@ -568,11 +569,13 @@ label {
 .small { font-size: 12px; color: var(--muted); }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .page-header h2 {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.4px;
 }
@@ -628,7 +631,7 @@ label {
 /* ── Login page ── */
 .login-wrap {
   min-height: 100vh;
-  background: var(--bg);
+  background: #f6f8fa;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -639,7 +642,6 @@ label {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   padding: 40px 36px;
   width: 100%;
   max-width: 400px;
@@ -1099,22 +1101,15 @@ label {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
-.stat-card.highlight {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.stat-card.highlight .stat-label,
-.stat-card.highlight .stat-hint { color: #bfdbfe; }
-.stat-label { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
-.stat-value { font-size: 32px; font-weight: 700; line-height: 1.1; }
+.stat-card.highlight .stat-value { color: var(--accent); }
+.stat-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.stat-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
 .stat-pct { font-size: 16px; font-weight: 600; margin-left: 6px; }
 .stat-pct.good { color: #16a34a; }
 .stat-pct.ok   { color: #d97706; }
 .stat-pct.warn { color: #dc2626; }
-.stat-hint { font-size: 12px; margin-top: 4px; }
+.stat-hint { font-size: 12px; margin-top: 4px; color: var(--muted-2); }
 
 .analytics-row { display: flex; gap: 16px; margin-bottom: 24px; }
 
@@ -1133,14 +1128,14 @@ label {
 .dept-count { font-size: 13px; font-weight: 600; width: 30px; text-align: right; flex-shrink: 0; }
 
 .roi-panel {
-  background: #f0fdf4;
-  border: 1.5px solid #bbf7d0;
-  border-radius: 12px;
+  background: #f6f8fa;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 20px 24px;
   margin-top: 8px;
 }
 .roi-headline { font-size: 16px; margin-bottom: 6px; }
-.roi-sub { font-size: 14px; color: #555; }
+.roi-sub { font-size: 14px; color: var(--muted); }
 
 .btn-outline {
   padding: 6px 14px;
