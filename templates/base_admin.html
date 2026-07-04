@@ -24,15 +24,19 @@
         <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">✕</button>
         <h1>Fandian</h1>
         <nav class="nav">
+          {% if session.get('role') == 'manager' %}
+          <a href="/admin/analytics" class="{% if active_page=='analytics' %}active{% endif %}">{{ t['nav_home'] }}</a>
+          {% endif %}
           <a href="/admin/checkin" class="{% if active_page=='checkin' %}active{% endif %}">{{ t['nav_checkin'] }}</a>
           <a href="/admin/messages" class="{% if active_page=='messages' %}active{% endif %}">{{ t['nav_messages'] }}</a>
           <a href="/admin/tasks" class="{% if active_page=='tasks' %}active{% endif %}">{{ t['nav_tasks'] }}</a>
           <a href="/admin/hotel" class="{% if active_page=='hotel' %}active{% endif %}">{{ t['nav_hotel'] }}</a>
           <a href="/admin/rooms" class="{% if active_page=='rooms' %}active{% endif %}">{{ t['nav_rooms'] }}</a>
           <a href="/admin/users" class="{% if active_page=='users' %}active{% endif %}">{{ t['nav_users'] }}</a>
-          {% if session.get('role') == 'manager' %}
-          <a href="/admin/analytics" class="{% if active_page=='analytics' %}active{% endif %}">{{ t['nav_analytics'] }}</a>
-          {% endif %}
+        </nav>
+        <nav class="nav nav-bottom">
+          <a href="/admin/support" class="{% if active_page=='support' %}active{% endif %}">{{ t['nav_support'] }}</a>
+          <a href="/admin/settings" class="{% if active_page=='settings' %}active{% endif %}">{{ t['nav_settings'] }}</a>
         </nav>
       </aside>
       <main class="content {% block content_class %}{% endblock %}">

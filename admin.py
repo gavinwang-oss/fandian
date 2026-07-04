@@ -585,7 +585,7 @@ def admin_hotel():
     csrf_token = _ensure_csrf_token()
     line_creds = get_hotel_line_credentials(hotel_id) or {}
     hotel = get_hotel(hotel_id)
-    staff_language = (hotel.get("staff_language") or "en") if hotel else "en"
+    staff_language = (hotel["staff_language"] or "en") if hotel and "staff_language" in hotel.keys() else "en"
     return render_template(
         "hotel.html",
         info_rows=list_hotel_info(hotel_id),
@@ -644,8 +644,30 @@ def admin_analytics():
         "analytics.html",
         data=data,
         days=days,
-        title="Analytics",
+        title="Home",
         active_page="analytics",
+    )
+
+
+@admin_bp.route("/admin/support")
+@login_required
+def admin_support():
+    return render_template(
+        "support.html",
+        title="Support",
+        active_page="support",
+    )
+
+
+@admin_bp.route("/admin/settings")
+@login_required
+def admin_settings():
+    hotel = get_hotel(session.get("hotel_id"))
+    return render_template(
+        "settings.html",
+        hotel=hotel,
+        title="Settings",
+        active_page="settings",
     )
 
 

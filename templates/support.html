@@ -1,0 +1,36 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>{{ t['support_heading'] }}</h2>
+  <p>{{ t['support_subtitle'] }}</p>
+</div>
+
+<div class="panel">
+  <h3>{{ t['support_contact_heading'] }}</h3>
+  <div class="info-row">
+    <span class="info-row-key">{{ t['support_email_label'] }}</span>
+    <span class="info-row-value">
+      <a href="mailto:support@fandian.app">support@fandian.app</a>
+      <div class="field-hint">{{ t['support_email_hint'] }}</div>
+    </span>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>{{ t['support_faq_heading'] }}</h3>
+  <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+    <strong>{{ t['support_faq_q1'] }}</strong>
+    <span class="small">{{ t['support_faq_a1'] }}</span>
+  </div>
+  <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+    <strong>{{ t['support_faq_q2'] }}</strong>
+    <span class="small">{{ t['support_faq_a2'] }}</span>
+  </div>
+  <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+    <strong>{{ t['support_faq_q3'] }}</strong>
+    <span class="small">{{ t['support_faq_a3'] }}</span>
+  </div>
+</div>
+
+{% endblock %}

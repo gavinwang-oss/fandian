@@ -9,6 +9,7 @@ Usage (via context processor in admin.py / app.py):
 TRANSLATIONS = {
     "en": {
         # ── Navigation ──
+        "nav_home": "Home",
         "nav_checkin": "Check In",
         "nav_messages": "Messages",
         "nav_tasks": "Tasks",
@@ -16,6 +17,8 @@ TRANSLATIONS = {
         "nav_rooms": "Room QR Codes",
         "nav_users": "Users",
         "nav_analytics": "Analytics",
+        "nav_support": "Support",
+        "nav_settings": "Settings",
         "nav_logout": "Logout",
         # ── Userbar ──
         "lang_toggle": "中",
@@ -132,7 +135,7 @@ TRANSLATIONS = {
         "users_status_inactive": "Inactive",
         "users_email_placeholder": "staff@hotel.com",
         # ── Analytics page ──
-        "analytics_heading": "Analytics",
+        "analytics_heading": "Home",
         "analytics_last_days": "Last {days} days",
         "analytics_guest_messages": "Guest Messages",
         "analytics_ai_resolved": "AI Resolved",
@@ -150,6 +153,35 @@ TRANSLATIONS = {
         "analytics_peak_hours": "Peak Request Hours",
         "analytics_roi_headline": "Your AI handled {count} requests in the last {days} days.",
         "analytics_roi_sub": "That's an estimated {hours} hours of front-desk time saved — roughly ${value} in labor value at $18/hr.",
+        # ── Support page ──
+        "support_heading": "Support",
+        "support_subtitle": "Questions, issues, or feedback — we're here to help.",
+        "support_contact_heading": "Contact us",
+        "support_email_label": "Email",
+        "support_email_hint": "We typically reply within one business day.",
+        "support_faq_heading": "Common questions",
+        "support_faq_q1": "A guest isn't receiving replies. What should I check?",
+        "support_faq_a1": "Confirm the guest hasn't opted out (they can text START to re-subscribe), and check the conversation in Messages to see if replies were sent.",
+        "support_faq_q2": "How do I add hotel information the AI can use?",
+        "support_faq_a2": "Go to Hotel Info & Knowledge and add quick facts (hours, WiFi) or knowledge entries. The AI uses these to answer guest questions.",
+        "support_faq_q3": "How do I set up room QR codes?",
+        "support_faq_a3": "Go to Room QR Codes, enter your room numbers, and print the generated codes. Guests scan to link their room automatically.",
+        # ── Settings page ──
+        "settings_heading": "Settings",
+        "settings_account_heading": "Account",
+        "settings_email_label": "Email",
+        "settings_role_label": "Role",
+        "settings_hotel_heading": "Hotel",
+        "settings_hotel_name_label": "Hotel name",
+        "settings_hotel_phone_label": "Guest phone number",
+        "settings_language_heading": "Language",
+        "settings_language_label": "Dashboard language",
+        "settings_language_hint": "Changes the language of the admin dashboard for this browser.",
+        "settings_lang_en": "English",
+        "settings_lang_zh": "繁體中文",
+        "settings_more_heading": "Hotel configuration",
+        "settings_more_hint": "Hotel info, knowledge base, and messaging channels are managed on the Hotel Info & Knowledge page.",
+        "settings_more_link": "Open Hotel Info & Knowledge",
         # ── Login page ──
         "login_heading": "Welcome back",
         "login_subtitle": "Sign in to your hotel dashboard",
@@ -161,6 +193,7 @@ TRANSLATIONS = {
 
     "zh": {
         # ── Navigation ──
+        "nav_home": "首頁",
         "nav_checkin": "辦理入住",
         "nav_messages": "訊息",
         "nav_tasks": "工作項目",
@@ -168,6 +201,8 @@ TRANSLATIONS = {
         "nav_rooms": "房間 QR Code",
         "nav_users": "使用者",
         "nav_analytics": "數據分析",
+        "nav_support": "支援",
+        "nav_settings": "設定",
         "nav_logout": "登出",
         # ── Userbar ──
         "lang_toggle": "EN",
@@ -284,7 +319,7 @@ TRANSLATIONS = {
         "users_status_inactive": "停用",
         "users_email_placeholder": "staff@hotel.com",
         # ── Analytics page ──
-        "analytics_heading": "數據分析",
+        "analytics_heading": "首頁",
         "analytics_last_days": "過去 {days} 天",
         "analytics_guest_messages": "賓客訊息",
         "analytics_ai_resolved": "AI 處理",
@@ -302,6 +337,35 @@ TRANSLATIONS = {
         "analytics_peak_hours": "尖峰請求時段",
         "analytics_roi_headline": "您的 AI 在過去 {days} 天處理了 {count} 筆請求。",
         "analytics_roi_sub": "預估節省了 {hours} 小時的前台時間，以 $18/小時計算，相當於約 ${value} 的人力成本。",
+        # ── Support page ──
+        "support_heading": "支援",
+        "support_subtitle": "有任何問題或建議，我們隨時為您服務。",
+        "support_contact_heading": "聯絡我們",
+        "support_email_label": "電子郵件",
+        "support_email_hint": "我們通常會在一個工作天內回覆。",
+        "support_faq_heading": "常見問題",
+        "support_faq_q1": "賓客收不到回覆，該怎麼辦？",
+        "support_faq_a1": "請確認賓客未退訂（可傳送 START 重新訂閱），並到「訊息」查看對話中的回覆是否已送出。",
+        "support_faq_q2": "如何新增 AI 可使用的飯店資訊？",
+        "support_faq_a2": "前往「飯店資訊與知識庫」新增快速資訊（營業時間、WiFi）或知識條目，AI 會使用這些內容回答賓客問題。",
+        "support_faq_q3": "如何設定房間 QR Code？",
+        "support_faq_a3": "前往「房間 QR Code」，輸入房號並列印產生的 QR Code。賓客掃描後即可自動連結房間。",
+        # ── Settings page ──
+        "settings_heading": "設定",
+        "settings_account_heading": "帳戶",
+        "settings_email_label": "電子郵件",
+        "settings_role_label": "角色",
+        "settings_hotel_heading": "飯店",
+        "settings_hotel_name_label": "飯店名稱",
+        "settings_hotel_phone_label": "賓客電話號碼",
+        "settings_language_heading": "語言",
+        "settings_language_label": "後台語言",
+        "settings_language_hint": "變更此瀏覽器的後台顯示語言。",
+        "settings_lang_en": "English",
+        "settings_lang_zh": "繁體中文",
+        "settings_more_heading": "飯店設定",
+        "settings_more_hint": "飯店資訊、知識庫與訊息管道請至「飯店資訊與知識庫」頁面管理。",
+        "settings_more_link": "前往飯店資訊與知識庫",
         # ── Login page ──
         "login_heading": "歡迎回來",
         "login_subtitle": "登入您的飯店後台",
