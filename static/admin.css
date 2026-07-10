@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 :root {
   --bg:        #ffffff;
   --panel:     #ffffff;
@@ -332,6 +330,35 @@ a:hover { text-decoration: underline; }
 .badge.normal  { background: #f3e9d3; color: #8a6528; }
 .badge.high    { background: #fed7aa; color: #9a3412; }
 .badge.urgent  { background: #fecaca; color: #b91c1c; }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.tabs a {
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tabs a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tabs a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.table tbody tr.row-link { cursor: pointer; }
 
 /* ── Filters ── */
 .filters {

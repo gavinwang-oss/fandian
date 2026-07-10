@@ -6,7 +6,8 @@
     <title>{{ title or "Admin" }} · Fandian</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="/static/admin.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+    <link rel="stylesheet" href="{{ static_url('admin.css') }}" />
   </head>
   <body>
     <!-- Mobile header bar -->
@@ -78,7 +79,7 @@
         {% block content %}{% endblock %}
       </main>
     </div>
-    <script src="/static/admin.js"></script>
+    <script src="{{ static_url('admin.js') }}" defer></script>
     <script>
       (function() {
         var btn = document.getElementById('hamburger-btn');

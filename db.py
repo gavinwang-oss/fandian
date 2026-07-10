@@ -149,7 +149,10 @@ _SCHEMA = [
             FOREIGN KEY (hotel_id) REFERENCES hotels (id)
         )
         """,
-        ["CREATE INDEX IF NOT EXISTS idx_stays_hotel ON stays (hotel_id)"],
+        [
+            "CREATE INDEX IF NOT EXISTS idx_stays_hotel ON stays (hotel_id)",
+            "CREATE INDEX IF NOT EXISTS idx_stays_guest_hotel ON stays (guest_id, hotel_id)",
+        ],
     ),
     (
         """
@@ -835,6 +838,47 @@ def list_conversations_for_hotel(hotel_id: int, limit: int = 100):
         LIMIT ?
         """,
         (hotel_id, limit),
+    )
+
+
+def list_guests_for_hotel(hotel_id: int, limit: int = 200):
+    """One row per guest at this hotel: latest stay plus activity summary."""
+    return _fetchall(
+        """
+        SELECT g.id AS guest_id, g.phone, g.created_at,
+               s.id AS stay_id, s.room_number, s.status AS stay_status,
+               COALESCE(msg.message_count, 0) AS message_count,
+               msg.last_message_at,
+               COALESCE(tk.open_task_count, 0) AS open_task_count,
+               p.opted_out
+        FROM (
+            SELECT guest_id, MAX(id) AS latest_stay_id
+            FROM stays WHERE hotel_id = ?
+            GROUP BY guest_id
+        ) latest
+        JOIN guests g ON g.id = latest.guest_id
+        JOIN stays s ON s.id = latest.latest_stay_id
+        LEFT JOIN (
+            SELECT s2.guest_id, COUNT(*) AS message_count,
+                   MAX(m.created_at) AS last_message_at
+            FROM messages m
+            JOIN stays s2 ON s2.id = m.stay_id
+            WHERE s2.hotel_id = ?
+            GROUP BY s2.guest_id
+        ) msg ON msg.guest_id = g.id
+        LEFT JOIN (
+            SELECT s2.guest_id, COUNT(*) AS open_task_count
+            FROM tasks t
+            JOIN stays s2 ON s2.id = t.stay_id
+            WHERE s2.hotel_id = ? AND t.status != 'done'
+            GROUP BY s2.guest_id
+        ) tk ON tk.guest_id = g.id
+        LEFT JOIN guest_hotel_preferences p
+               ON p.guest_id = g.id AND p.hotel_id = ?
+        ORDER BY COALESCE(msg.last_message_at, g.created_at) DESC
+        LIMIT ?
+        """,
+        (hotel_id, hotel_id, hotel_id, hotel_id, limit),
     )
 
 

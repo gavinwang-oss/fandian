@@ -5,6 +5,61 @@
   <h2>{{ t['users_heading'] }}</h2>
 </div>
 
+<div class="tabs">
+  <a href="{{ url_for('admin.admin_users', tab='guests') }}" class="{{ 'active' if tab == 'guests' }}">{{ t['users_tab_guests'] }}</a>
+  <a href="{{ url_for('admin.admin_users', tab='staff') }}" class="{{ 'active' if tab == 'staff' }}">{{ t['users_tab_staff'] }}</a>
+</div>
+
+{% if tab == 'guests' %}
+
+<div class="panel">
+  {% if guests %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{{ t['guests_table_phone'] }}</th>
+        <th>{{ t['guests_table_room'] }}</th>
+        <th>{{ t['guests_table_stay'] }}</th>
+        <th>{{ t['guests_table_messages'] }}</th>
+        <th>{{ t['guests_table_open_tasks'] }}</th>
+        <th>{{ t['guests_table_last_active'] }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in guests %}
+      <tr class="row-link" onclick="window.location='{{ url_for('admin.admin_messages', stay=g['stay_id']) }}'">
+        <td style="font-weight:500;">
+          {{ g['phone'] }}
+          {% if g['opted_out'] %}<span class="badge urgent" style="margin-left:8px;">{{ t['guests_opted_out'] }}</span>{% endif %}
+        </td>
+        <td>{{ g['room_number'] or '—' }}</td>
+        <td>
+          {% if g['stay_status'] == 'active' %}
+          <span class="badge done">{{ t['guests_stay_active'] }}</span>
+          {% else %}
+          <span class="badge low">{{ g['stay_status']|replace('_', ' ')|capitalize }}</span>
+          {% endif %}
+        </td>
+        <td>{{ g['message_count'] }}</td>
+        <td>
+          {% if g['open_task_count'] %}
+          <span class="badge open">{{ g['open_task_count'] }}</span>
+          {% else %}
+          0
+          {% endif %}
+        </td>
+        <td class="small">{{ g['last_active'] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="small" style="padding:8px 4px;">{{ t['guests_empty'] }}</p>
+  {% endif %}
+</div>
+
+{% else %}
+
 <div class="panel">
   <table class="table">
     <thead>
@@ -50,5 +105,7 @@
     <button class="btn" type="submit">{{ t['btn_create_user'] }}</button>
   </form>
 </div>
+
+{% endif %}
 
 {% endblock %}

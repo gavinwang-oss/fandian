@@ -6,7 +6,9 @@ import logging
 import os
 import re
 import requests
+from functools import lru_cache
 from flask import Flask, request, redirect, url_for, render_template, session, abort
+from flask_compress import Compress
 from twilio.twiml.messaging_response import MessagingResponse
 from twilio.request_validator import RequestValidator
 from werkzeug.security import check_password_hash
@@ -45,6 +47,24 @@ app = Flask(__name__)
 app.config.from_object(Config)
 app.secret_key = app.config["SECRET_KEY"]
 app.register_blueprint(admin_bp)
+
+# Static assets get a version query param from static_url(), so they can be
+# cached for a year and still update instantly on deploy.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
+Compress(app)
+
+
+@lru_cache(maxsize=None)
+def _static_file_version(filename: str) -> int:
+    try:
+        return int(os.stat(os.path.join(app.static_folder, filename)).st_mtime)
+    except OSError:
+        return 0
+
+
+@app.template_global("static_url")
+def static_url(filename: str) -> str:
+    return url_for("static", filename=filename, v=_static_file_version(filename))
 
 @app.route("/")
 def index():

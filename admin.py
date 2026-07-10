@@ -29,6 +29,7 @@ from db import (
     delete_hotel_doc,
     list_staff_users,
     create_staff_user,
+    list_guests_for_hotel,
     get_task,
     is_opted_out,
     get_guest_id_for_stay,
@@ -620,13 +621,26 @@ def admin_users():
         if email and password:
             create_staff_user(hotel_id, email, generate_password_hash(password), role)
             logger.info("staff_user_created", extra={"email": email, "hotel_id": hotel_id})
-        return redirect(url_for("admin.admin_users"))
+        return redirect(url_for("admin.admin_users", tab="staff"))
+
+    tab = request.args.get("tab", "guests")
+    if tab not in ("guests", "staff"):
+        tab = "guests"
+
+    guests = []
+    if tab == "guests":
+        for g in list_guests_for_hotel(hotel_id):
+            g = dict(g)
+            g["last_active"] = _relative_time(g["last_message_at"]) if g["last_message_at"] else "—"
+            guests.append(g)
 
     rows = list_staff_users(hotel_id)
     csrf_token = _ensure_csrf_token()
     return render_template(
         "users.html",
         rows=rows,
+        guests=guests,
+        tab=tab,
         csrf_token=csrf_token,
         title="Users",
         active_page="users",
