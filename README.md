@@ -40,14 +40,14 @@ Requires Python 3.10+, a Twilio account, and an OpenAI API key. See `.env.exampl
 ## What I Learned
 
 - **Prompt engineering is an iterative product problem.** Getting the LLM to reliably distinguish "this guest wants towels" (task) from "what time does the pool close?" (reply) required far more iteration than expected. Small changes in system prompt wording had large effects on behavior.
-- **Webhooks require defensive design.** Twilio can retry failed requests, guests can send bursts of messages, and numbers can be spoofed. Rate limiting, idempotency, and opt-out compliance aren't optional — they're table stakes.
+- **Webhooks require defensive design.** Twilio can retry failed requests, guests can send bursts of messages, and numbers can be spoofed. Rate limiting, idempotency, and opt-out compliance are essential to smooth operations.
 - **RAG quality depends on chunking and retrieval, not just embeddings.** Early versions returned irrelevant context because knowledge docs were too long and similarity thresholds were too loose. Tightening both improved response quality significantly.
-- **Server-rendered UIs are underrated for internal tools.** Flask + Jinja was fast to build, easy to reason about, and more than sufficient for a staff-facing dashboard with no need for real-time reactivity.
+- **Server-rendered UIs for internal tools.** Flask + Jinja was fast to build, easy to reason about, and  sufficient for a staff-facing dashboard with no need for real-time reactivity.
 - **Database schema design matters early.** Retrofitting multi-hotel isolation (scoping everything by `hotel_id`) after the fact would have been painful — building it in from the start kept the data model clean.
 
 ## What I Would Do Differently
 
-- **Add a message queue (e.g. Redis + Celery) from the start.** Handling LLM calls synchronously inside the webhook handler works in development but is fragile under load — a slow OpenAI response can cause Twilio to retry and create duplicate messages.
+- **Add a message queue (e.g. Redis + Celery) from the start.** Handling LLM calls synchronously inside the webhook handler works in development but is fragile under load; a slow OpenAI response can cause Twilio to retry and create duplicate messages.
 - **Abstract the messaging transport layer earlier.** The app is tightly coupled to Twilio SMS. Supporting additional channels (WhatsApp, Line, web chat) would require significant refactoring; a thin transport abstraction from day one would have made this easier.
 - **Use structured outputs for LLM responses.** Early versions parsed free-text LLM responses with heuristics. Switching to OpenAI's structured output / JSON mode made the routing logic dramatically more reliable.
 - **Write integration tests for the webhook pipeline.** The `/sms` route involves several sequential steps (hotel lookup, guest creation, rate limiting, LLM call, Twilio send) — any one of which can fail silently. Automated tests with a mocked Twilio client would have caught several bugs earlier.

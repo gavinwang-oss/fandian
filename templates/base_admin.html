@@ -14,7 +14,7 @@
       <button class="hamburger" id="hamburger-btn" aria-label="Open menu">
         <span></span><span></span><span></span>
       </button>
-      <span class="mobile-logo"><span class="logo-mark">F</span>Fandian</span>
+      <span class="mobile-logo">{% include "_logo_mark.html" %}Fandian</span>
     </div>
     <!-- Sidebar overlay backdrop -->
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
@@ -22,7 +22,7 @@
     <div class="layout">
       <aside class="sidebar" id="sidebar">
         <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">✕</button>
-        <h1><span class="logo-mark">F</span>Fandian</h1>
+        <h1>{% include "_logo_mark.html" %}Fandian</h1>
         <nav class="nav">
           {% if session.get('role') == 'manager' %}
           <a href="/admin/analytics" class="{% if active_page=='analytics' %}active{% endif %}">
