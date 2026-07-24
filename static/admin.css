@@ -1377,6 +1377,11 @@ label {
     flex-wrap: wrap;
   }
 
+  /* Userbar is in normal flow here, so drop the desktop clearance margin. */
+  .dash-header {
+    margin-top: 0;
+  }
+
   .hamburger {
     background: none;
     border: none;
@@ -1579,8 +1584,11 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: 16px 24px;
   flex-wrap: wrap;
+  /* Clear the absolutely-positioned .page-userbar (top:26px, ~30px tall)
+     so the right-aligned period/Customize controls don't overlap it. */
+  margin-top: 44px;
 }
 .dash-controls {
   display: flex;
