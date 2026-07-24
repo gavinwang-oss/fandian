@@ -1,142 +1,302 @@
 {% extends "base_admin.html" %}
 {% block content %}
-<div class="page-header">
+<div class="page-header dash-header">
   <div>
-    <h2>{{ t['analytics_heading'] }}</h2>
-    <p class="page-subtitle">{{ t['analytics_last_days'].replace('{days}', days|string) }}</p>
+    <h2>Your overview</h2>
+    <p class="page-subtitle">{{ page_label }}</p>
   </div>
-  <div style="display:flex;gap:8px;">
-    <a href="?days=7"  class="btn-outline {% if days==7  %}active{% endif %}">7d</a>
-    <a href="?days=30" class="btn-outline {% if days==30 %}active{% endif %}">30d</a>
-    <a href="?days=90" class="btn-outline {% if days==90 %}active{% endif %}">90d</a>
-  </div>
-</div>
-
-{# ── Top stat cards ── #}
-<div class="analytics-grid">
-  <div class="stat-card">
-    <div class="stat-label">{{ t['analytics_guest_messages'] }}</div>
-    <div class="stat-value">{{ data.total_inbound }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">{{ t['analytics_ai_resolved'] }}</div>
-    <div class="stat-value">{{ data.ai_replies }}
-      <span class="stat-pct {% if data.ai_rate >= 70 %}good{% elif data.ai_rate >= 40 %}ok{% else %}warn{% endif %}">
-        {{ data.ai_rate }}%
-      </span>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">{{ t['analytics_tasks_created'] }}</div>
-    <div class="stat-value">{{ data.tasks_created }}</div>
-  </div>
-  <div class="stat-card highlight">
-    <div class="stat-label">{{ t['analytics_hours_saved'] }}</div>
-    <div class="stat-value">{{ data.hours_saved }}h</div>
-    <div class="stat-hint">{{ t['analytics_hours_saved_hint'] }}</div>
-  </div>
-</div>
-
-{# ── Response times ── #}
-<div class="analytics-row">
-  <div class="panel" style="flex:1">
-    <div class="panel-title">{{ t['analytics_response_times'] }}</div>
-    <table class="info-table">
-      <tr>
-        <td>{{ t['analytics_ai_response'] }}</td>
-        <td><strong>{{ t['analytics_ai_instant'] }}</strong> <span class="badge-green">✓</span></td>
-      </tr>
-      <tr>
-        <td>{{ t['analytics_avg_staff_reply'] }}</td>
-        <td>
-          {% if data.avg_staff_reply_min is not none %}
-            {% set h = (data.avg_staff_reply_min // 60)|int %}
-            {% set m = (data.avg_staff_reply_min % 60)|int %}
-            <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
-          {% else %}
-            <span class="muted">{{ t['analytics_no_data'] }}</span>
-          {% endif %}
-        </td>
-      </tr>
-      <tr>
-        <td>{{ t['analytics_avg_resolution'] }}</td>
-        <td>
-          {% if data.avg_resolution_min is not none %}
-            {% set h = (data.avg_resolution_min // 60)|int %}
-            {% set m = (data.avg_resolution_min % 60)|int %}
-            <strong>{% if h %}{{ h }}h {% endif %}{{ m }}min</strong>
-          {% else %}
-            <span class="muted">{{ t['analytics_no_data'] }}</span>
-          {% endif %}
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  <div class="panel" style="flex:1">
-    <div class="panel-title">{{ t['analytics_by_dept'] }}</div>
-    <div style="margin-top:16px;">
-    {% if data.dept_breakdown %}
-      {% set total_tasks = data.dept_breakdown | sum(attribute='count') %}
-      {% for d in data.dept_breakdown %}
-        <div class="dept-row">
-          <span class="dept-name">{{ d.department | capitalize }}</span>
-          <div class="dept-bar-wrap">
-            <div class="dept-bar" style="width:{{ ((d.count / total_tasks) * 100)|int }}%"></div>
-          </div>
-          <span class="dept-count">{{ d.count }}</span>
+  <div class="dash-controls">
+    {# ── Page-level period selector ── #}
+    <div class="period-picker">
+      <a href="?range=7d"  class="btn-outline {% if page_kind=='7d'  %}active{% endif %}">7d</a>
+      <a href="?range=30d" class="btn-outline {% if page_kind=='30d' %}active{% endif %}">30d</a>
+      <a href="?range=90d" class="btn-outline {% if page_kind=='90d' %}active{% endif %}">90d</a>
+      <div class="custom-range">
+        <button type="button" class="btn-outline {% if page_kind=='custom' %}active{% endif %}" id="custom-toggle">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          {% if page_kind=='custom' %}{{ custom_start }} – {{ custom_end }}{% else %}Custom{% endif %}
+        </button>
+        <div class="custom-pop" id="custom-pop" hidden>
+          <form method="get" action="/admin/analytics" class="custom-form">
+            <label>From <input type="date" name="start" value="{{ custom_start }}" required></label>
+            <label>To <input type="date" name="end" value="{{ custom_end }}" required></label>
+            <button type="submit" class="btn-primary">Apply</button>
+          </form>
         </div>
-      {% endfor %}
-    {% else %}
-      <p class="muted">{{ t['analytics_no_tasks'] }}</p>
-    {% endif %}
+      </div>
+    </div>
+    <div class="customize-wrap">
+      <button type="button" class="btn-outline customize-btn" id="customize-toggle">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Customize
+      </button>
+      <div class="customize-pop" id="customize-pop" hidden>
+        <div class="customize-head">Customize view</div>
+        <ul class="customize-list" id="customize-list">
+          {% for c in catalogue %}
+          <li class="customize-item" draggable="true" data-id="{{ c.id }}">
+            <span class="drag-grip" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
+            </span>
+            <span class="customize-name">{{ c.title }}</span>
+            <label class="switch">
+              <input type="checkbox" class="wtoggle" {% if c.enabled %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="customize-foot">
+          <span class="customize-hint">Drag to reorder · toggle to show/hide</span>
+          <button type="button" class="btn-primary" id="customize-done">Done</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-{# ── Peak hours chart ── #}
-<div class="panel">
-  <div class="panel-title">{{ t['analytics_peak_hours'] }}</div>
-  <canvas id="peakChart" height="80"></canvas>
-</div>
+{# ── Widget grid ── #}
+<div class="dash-grid">
+  {% for w in widgets %}
+  <div class="dash-card kind-{{ w.kind }}" data-id="{{ w.id }}">
+    <div class="dash-card-head">
+      <div class="dash-card-titles">
+        <div class="dash-card-title">{{ w.title }}</div>
+        <div class="dash-card-desc">{{ w.desc }}</div>
+      </div>
+      {% if w.kind == 'live' %}
+        <span class="live-dot" title="Live"></span>
+      {% else %}
+        <select class="pin-select" data-id="{{ w.id }}" title="Time period for this widget">
+          <option value="" {% if not w.pinned %}selected{% endif %}>Follow page</option>
+          <option value="7d"  {% if w.period_value=='7d'  %}selected{% endif %}>7d</option>
+          <option value="30d" {% if w.period_value=='30d' %}selected{% endif %}>30d</option>
+          <option value="90d" {% if w.period_value=='90d' %}selected{% endif %}>90d</option>
+        </select>
+      {% endif %}
+    </div>
 
-{# ── ROI callout ── #}
-{% if data.ai_replies > 0 %}
-<div class="panel roi-panel">
-  <div class="roi-headline">
-    {{ t['analytics_roi_headline'].replace('{count}', data.ai_replies|string).replace('{days}', days|string) | safe }}
+    {% if w.kind == 'number' %}
+      <div class="dash-value-row">
+        <span class="dash-value">{{ w.value_fmt }}</span>
+        {% if w.has_delta and w.delta_display %}
+          <span class="dash-delta {{ 'up' if w.trend_up else 'down' }}">{{ w.delta_display }}</span>
+        {% endif %}
+      </div>
+      <div class="dash-secondary">
+        {% if w.secondary %}{{ w.secondary }}{% else %}vs previous period{% endif %}
+      </div>
+      {% if w.id == 'time_saved' %}
+      <div class="rate-row">
+        <span class="rate-label">Rate</span>
+        <span class="rate-input-wrap">$<input type="number" min="0" step="1" class="rate-input" id="rate-input" value="{{ rate|int }}">/hr</span>
+      </div>
+      {% endif %}
+      <div class="dash-chart"><canvas class="wchart" data-id="{{ w.id }}"></canvas></div>
+      <script>window.__DASH=window.__DASH||{};window.__DASH['{{ w.id }}']={type:'{{ w.chart_type }}',labels:{{ w.chart_labels|tojson }},values:{{ w.chart_values|tojson }},unit:'{{ w.unit }}'};</script>
+
+    {% elif w.kind == 'live' %}
+      <div class="dash-value-row"><span class="dash-value">{{ w.value_fmt }}</span></div>
+      <div class="dash-secondary {{ 'danger' if w.sub_danger else '' }}">{{ w.sub }}</div>
+      <div class="live-fill"></div>
+
+    {% elif w.kind == 'department' %}
+      <div class="dept-list">
+        {% if w.rows %}
+          {% for r in w.rows %}
+          <div class="dept-row">
+            <span class="dept-name">{{ r.department }}</span>
+            <div class="dept-bar-wrap"><div class="dept-bar" style="width:{{ r.pct }}%"></div></div>
+            <span class="dept-count">{{ r.count }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted dash-empty">No tasks in this period.</p>
+        {% endif %}
+      </div>
+
+    {% elif w.kind == 'peak' %}
+      <div class="dash-chart peak-chart"><canvas class="wchart" data-id="{{ w.id }}"></canvas></div>
+      <script>window.__DASH=window.__DASH||{};window.__DASH['{{ w.id }}']={type:'{{ w.chart_type }}',labels:{{ w.chart_labels|tojson }},values:{{ w.chart_values|tojson }},unit:''};</script>
+
+    {% elif w.kind == 'list_q' %}
+      <ol class="rank-list">
+        {% if w.entries %}
+          {% for it in w.entries %}
+          <li class="rank-item">
+            <span class="rank-text">{{ it.summary }}</span>
+            <span class="prio-badge prio-{{ it.priority }}">{{ it.priority }}</span>
+          </li>
+          {% endfor %}
+        {% else %}
+          <p class="muted dash-empty">No guest requests in this period.</p>
+        {% endif %}
+      </ol>
+
+    {% elif w.kind == 'list_u' %}
+      <ul class="fix-list">
+        {% if w.entries %}
+          {% for it in w.entries %}
+          <li class="fix-item">
+            <span class="fix-q">{{ it.question }}</span>
+            {% if it.title %}<span class="fix-hint">Suggested: {{ it.title }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        {% else %}
+          <p class="muted dash-empty">Nothing outstanding — your guide is covering guests.</p>
+        {% endif %}
+      </ul>
+    {% endif %}
   </div>
-  <div class="roi-sub">
-    {{ t['analytics_roi_sub'].replace('{hours}', data.hours_saved|string).replace('{value}', (data.hours_saved * 18)|int|string) | safe }}
+  {% endfor %}
+
+  {% if not widgets %}
+  <div class="dash-allhidden">
+    <p>All widgets are hidden. Click <strong>Customize</strong> to turn some back on.</p>
   </div>
+  {% endif %}
 </div>
-{% endif %}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
-  const hours = Array.from({length: 24}, (_, i) => {
-    const h = i % 12 || 12;
-    return (i < 12 ? h + 'am' : h + 'pm');
-  });
-  const counts = {{ data.peak_hours_list | tojson }};
+(function () {
+  var ACCENT = '#b78a43';
 
-  new Chart(document.getElementById('peakChart'), {
-    type: 'bar',
-    data: {
-      labels: hours,
-      datasets: [{
-        data: counts,
-        backgroundColor: '#b78a43',
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1 } },
-        x: { grid: { display: false } }
+  // ── Charts ──────────────────────────────────────────────
+  function softGradient(ctx, area) {
+    var g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, 'rgba(183,138,67,0.28)');
+    g.addColorStop(1, 'rgba(183,138,67,0.02)');
+    return g;
+  }
+  document.querySelectorAll('canvas.wchart').forEach(function (cv) {
+    var d = (window.__DASH || {})[cv.dataset.id];
+    if (!d) return;
+    var isLine = d.type === 'line';
+    new Chart(cv, {
+      type: isLine ? 'line' : 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [{
+          data: d.values,
+          borderColor: ACCENT,
+          borderWidth: isLine ? 2 : 0,
+          tension: 0.35,
+          pointRadius: 0,
+          borderRadius: isLine ? 0 : 3,
+          fill: isLine,
+          backgroundColor: isLine
+            ? function (c) { var a = c.chart.chartArea; return a ? softGradient(c.chart.ctx, a) : 'rgba(183,138,67,0.15)'; }
+            : 'rgba(183,138,67,0.75)'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: {
+              label: function (c) { return c.parsed.y + (d.unit || ''); }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxTicksLimit: 6, color: '#9aa2b1', font: { size: 10 } } },
+          y: { display: false, beginAtZero: true }
+        }
       }
-    }
+    });
   });
+
+  // ── Popover open/close helpers ──────────────────────────
+  function wire(toggleId, popId) {
+    var t = document.getElementById(toggleId), p = document.getElementById(popId);
+    if (!t || !p) return;
+    t.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = !p.hidden;
+      document.querySelectorAll('.custom-pop, .customize-pop').forEach(function (x) { x.hidden = true; });
+      p.hidden = open;
+    });
+    p.addEventListener('click', function (e) { e.stopPropagation(); });
+  }
+  wire('custom-toggle', 'custom-pop');
+  wire('customize-toggle', 'customize-pop');
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.custom-pop, .customize-pop').forEach(function (x) { x.hidden = true; });
+  });
+
+  // ── Config persistence ──────────────────────────────────
+  var PINS = {};
+  {% for c in catalogue %}PINS['{{ c.id }}'] = '{{ c.period }}';{% endfor %}
+
+  function collectConfig() {
+    var items = document.querySelectorAll('#customize-list .customize-item');
+    return Array.prototype.map.call(items, function (li) {
+      var id = li.dataset.id;
+      return { id: id, enabled: li.querySelector('.wtoggle').checked, period: PINS[id] || null };
+    });
+  }
+  function saveConfig(reload) {
+    fetch('/admin/analytics/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: collectConfig() })
+    }).then(function () { if (reload) window.location.reload(); });
+  }
+
+  // Per-widget period pin
+  document.querySelectorAll('.pin-select').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      PINS[sel.dataset.id] = sel.value || null;
+      saveConfig(true);
+    });
+  });
+
+  // Customize: toggle saves immediately (so reorder/enable persist)
+  document.getElementById('customize-done') &&
+    document.getElementById('customize-done').addEventListener('click', function () { saveConfig(true); });
+
+  // ── Drag to reorder ─────────────────────────────────────
+  var list = document.getElementById('customize-list');
+  var dragEl = null;
+  if (list) {
+    list.querySelectorAll('.customize-item').forEach(function (li) {
+      li.addEventListener('dragstart', function () { dragEl = li; li.classList.add('dragging'); });
+      li.addEventListener('dragend', function () { li.classList.remove('dragging'); dragEl = null; });
+    });
+    list.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      var after = getAfter(list, e.clientY);
+      if (!dragEl) return;
+      if (after == null) list.appendChild(dragEl);
+      else list.insertBefore(dragEl, after);
+    });
+  }
+  function getAfter(container, y) {
+    var els = Array.prototype.slice.call(container.querySelectorAll('.customize-item:not(.dragging)'));
+    return els.reduce(function (closest, child) {
+      var box = child.getBoundingClientRect();
+      var offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
+      return closest;
+    }, { offset: -Infinity, element: null }).element;
+  }
+
+  // ── Editable time-saved rate ────────────────────────────
+  var rateInput = document.getElementById('rate-input');
+  if (rateInput) {
+    var commit = function () {
+      fetch('/admin/analytics/rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rate: parseFloat(rateInput.value) || 0 })
+      }).then(function () { window.location.reload(); });
+    };
+    rateInput.addEventListener('change', commit);
+    rateInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); rateInput.blur(); } });
+  }
+})();
 </script>
 {% endblock %}

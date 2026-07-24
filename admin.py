@@ -1,6 +1,7 @@
+import json
 import logging
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, session, abort, current_app, jsonify
 from twilio.rest import Client
 
@@ -47,6 +48,14 @@ from db import (
     get_hotel_line_credentials,
     update_hotel_line_credentials,
     update_hotel_staff_language,
+    get_dashboard_prefs,
+    save_dashboard_prefs,
+    dashboard_daily_counts,
+    dashboard_live,
+    dashboard_department,
+    dashboard_peak_hours,
+    dashboard_top_questions,
+    dashboard_unanswered,
 )
 from werkzeug.security import generate_password_hash
 
@@ -647,20 +656,312 @@ def admin_users():
     )
 
 
+# ── Customizable dashboard ─────────────────────────────────────────────
+
+# Widget catalogue. `kind` drives how the template renders each card;
+# `chart` picks the baked-in mini chart for number widgets.
+WIDGET_META = {
+    "guest_messages":     {"title": "Guest messages",        "desc": "Total handled",           "kind": "number", "chart": "line"},
+    "ai_resolved":        {"title": "AI resolved",           "desc": "Handled without a human", "kind": "number", "chart": "line", "unit": "%"},
+    "escalations":        {"title": "Escalations to staff",  "desc": "Handed to a human",       "kind": "number", "chart": "bar"},
+    "time_saved":         {"title": "Staff time saved",      "desc": "Hours + value",           "kind": "number", "chart": "bar", "unit": "h"},
+    "open_conversations": {"title": "Open conversations",    "desc": "Waiting on a human",      "kind": "live"},
+    "open_tasks":         {"title": "Open tasks",            "desc": "Live, with overdue",      "kind": "live"},
+    "tasks_completed":    {"title": "Tasks completed",       "desc": "Closed by staff",         "kind": "number", "chart": "bar"},
+    "tasks_by_department":{"title": "Tasks by department",   "desc": "Split by team",           "kind": "department"},
+    "peak_hours":         {"title": "Peak request hours",    "desc": "When guests message",     "kind": "peak"},
+    "top_questions":      {"title": "Top guest questions",   "desc": "Ranked by urgency",       "kind": "list_q"},
+    "unanswered":         {"title": "Questions the AI couldn't answer", "desc": "Fix your guide", "kind": "list_u"},
+}
+DEFAULT_ORDER = list(WIDGET_META.keys())
+DEFAULT_RATE = 25.0
+MINUTES_PER_RESOLUTION = 4
+
+
+def _valid_period(p):
+    if p is None or p in ("7d", "30d", "90d"):
+        return True
+    if isinstance(p, dict) and "start" in p and "end" in p:
+        try:
+            datetime.fromisoformat(str(p["start"]))
+            datetime.fromisoformat(str(p["end"]))
+            return True
+        except ValueError:
+            return False
+    return False
+
+
+def _period_bounds(period):
+    """Return (start_dt, end_dt_exclusive, label) for a period spec."""
+    now = datetime.utcnow()
+    if isinstance(period, dict):
+        s = datetime.fromisoformat(str(period["start"]))
+        e = datetime.fromisoformat(str(period["end"])) + timedelta(days=1)
+        return s, e, f"{period['start']} to {period['end']}"
+    days = {"7d": 7, "30d": 30, "90d": 90}.get(period or "30d", 30)
+    return now - timedelta(days=days), now, f"Last {days} days"
+
+
+def _dashboard_buckets(start_dt, end_dt, granularity):
+    endd = (end_dt - timedelta(seconds=1)).date()
+    d = start_dt.date()
+    days = []
+    while d <= endd:
+        days.append(d)
+        d += timedelta(days=1)
+    if granularity == "day":
+        return [{"label": dd.strftime("%b %d").replace(" 0", " "), "keys": [dd.strftime("%Y-%m-%d")]} for dd in days]
+    groups, order = {}, []
+    for dd in days:
+        wk = dd - timedelta(days=dd.weekday())
+        k = wk.strftime("%Y-%m-%d")
+        if k not in groups:
+            groups[k] = {"label": wk.strftime("%b %d").replace(" 0", " "), "keys": []}
+            order.append(k)
+        groups[k]["keys"].append(dd.strftime("%Y-%m-%d"))
+    return [groups[k] for k in order]
+
+
+def _sum_over(daymap, keys):
+    return sum(daymap.get(k, 0) for k in keys)
+
+
+def _load_dashboard_config(user_id):
+    """Merge the user's saved layout with the widget catalogue so new widgets
+    surface and removed ones drop out. Returns ordered list of
+    {id, enabled, period}."""
+    raw = get_dashboard_prefs(user_id)
+    saved = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                saved = parsed
+        except (ValueError, TypeError):
+            saved = []
+    result, seen = [], set()
+    for x in saved:
+        if not isinstance(x, dict):
+            continue
+        wid = x.get("id")
+        if wid in WIDGET_META and wid not in seen:
+            period = x.get("period")
+            if not _valid_period(period):
+                period = None
+            result.append({"id": wid, "enabled": bool(x.get("enabled", True)), "period": period})
+            seen.add(wid)
+    for wid in DEFAULT_ORDER:
+        if wid not in seen:
+            result.append({"id": wid, "enabled": True, "period": None})
+    return result
+
+
+def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity, rate):
+    buckets = _dashboard_buckets(s, e, granularity)
+    unit = WIDGET_META[metric].get("unit", "")
+    secondary, delta_unit = None, "%"
+
+    if metric in ("guest_messages", "escalations", "tasks_completed"):
+        daymap = dashboard_daily_counts(hotel_id, metric, s, e)
+        prevmap = dashboard_daily_counts(hotel_id, metric, prev_s, prev_e)
+        value = sum(daymap.values())
+        prev = sum(prevmap.values())
+        series = [{"label": b["label"], "value": _sum_over(daymap, b["keys"])} for b in buckets]
+        value_fmt = f"{value:,}"
+
+    elif metric == "ai_resolved":
+        aimap = dashboard_daily_counts(hotel_id, "ai_resolved", s, e)
+        inmap = dashboard_daily_counts(hotel_id, "guest_messages", s, e)
+        ai_prev = sum(dashboard_daily_counts(hotel_id, "ai_resolved", prev_s, prev_e).values())
+        in_prev = sum(dashboard_daily_counts(hotel_id, "guest_messages", prev_s, prev_e).values())
+        ai_tot, in_tot = sum(aimap.values()), sum(inmap.values())
+        value = round(ai_tot / in_tot * 100) if in_tot else 0
+        prev = round(ai_prev / in_prev * 100) if in_prev else 0
+        series = []
+        for b in buckets:
+            a, i = _sum_over(aimap, b["keys"]), _sum_over(inmap, b["keys"])
+            series.append({"label": b["label"], "value": round(a / i * 100) if i else 0})
+        value_fmt = f"{value}%"
+        secondary = f"{ai_tot:,} of {in_tot:,} messages"
+        delta_unit = "pt"
+
+    else:  # time_saved
+        aimap = dashboard_daily_counts(hotel_id, "ai_resolved", s, e)
+        ai_prev = sum(dashboard_daily_counts(hotel_id, "ai_resolved", prev_s, prev_e).values())
+        ai_tot = sum(aimap.values())
+        value = round(ai_tot * MINUTES_PER_RESOLUTION / 60, 1)
+        prev = round(ai_prev * MINUTES_PER_RESOLUTION / 60, 1)
+        series = [{"label": b["label"], "value": round(_sum_over(aimap, b["keys"]) * MINUTES_PER_RESOLUTION / 60, 1)} for b in buckets]
+        value_fmt = f"{value}h"
+        secondary = f"${round(value * rate):,} saved"
+
+    if metric == "ai_resolved":
+        delta = value - prev
+        delta_display = f"{'+' if delta >= 0 else ''}{delta}{delta_unit}"
+        has_delta = prev > 0 or value > 0
+    else:
+        delta = round((value - prev) / prev * 100) if prev else None
+        delta_display = (f"{'+' if delta >= 0 else ''}{delta}%") if delta is not None else None
+        has_delta = delta is not None
+    trend_up = (value - prev) >= 0
+
+    return {
+        "value_fmt": value_fmt,
+        "secondary": secondary,
+        "delta_display": delta_display,
+        "has_delta": has_delta,
+        "trend_up": trend_up,
+        "chart_type": WIDGET_META[metric].get("chart", "line"),
+        "chart_labels": [x["label"] for x in series],
+        "chart_values": [x["value"] for x in series],
+        "unit": unit,
+    }
+
+
+def _build_widget(hotel_id, wid, s, e, rate, live, pinned, period_label, period_value):
+    meta = WIDGET_META[wid]
+    span = max(1, (e - s).days)
+    granularity = "day" if span <= 31 else "week"
+    prev_s, prev_e = s - (e - s), s
+    w = {
+        "id": wid, "title": meta["title"], "desc": meta["desc"], "kind": meta["kind"],
+        "pinned": pinned, "period_label": period_label, "period_value": period_value or "",
+    }
+    if meta["kind"] == "number":
+        w.update(_build_number_widget(hotel_id, wid, s, e, prev_s, prev_e, granularity, rate))
+        if wid == "time_saved":
+            w["rate"] = rate
+    elif meta["kind"] == "live":
+        if wid == "open_conversations":
+            w["value_fmt"] = f"{live['open_conversations']:,}"
+            w["sub"] = "Waiting on a human right now"
+            w["sub_danger"] = False
+        else:
+            w["value_fmt"] = f"{live['open_tasks']:,}"
+            od = live["overdue"]
+            w["sub"] = (f"{od} overdue" if od else "None overdue")
+            w["sub_danger"] = od > 0
+    elif meta["kind"] == "department":
+        rows = dashboard_department(hotel_id, s, e)
+        total = sum(r["count"] for r in rows) or 1
+        w["rows"] = [{"department": r["department"].capitalize(), "count": r["count"],
+                      "pct": round(r["count"] / total * 100)} for r in rows]
+    elif meta["kind"] == "peak":
+        hours = dashboard_peak_hours(hotel_id, s, e)
+        labels = [(f"{(h % 12) or 12}{'a' if h < 12 else 'p'}") for h in range(24)]
+        w["chart_labels"], w["chart_values"] = labels, hours
+        w["chart_type"], w["unit"] = "bar", ""
+    elif meta["kind"] == "list_q":
+        w["entries"] = dashboard_top_questions(hotel_id, s, e)
+    elif meta["kind"] == "list_u":
+        w["entries"] = dashboard_unanswered(hotel_id)
+    return w
+
+
 @admin_bp.route("/admin/analytics")
 @login_required
 @role_required("manager")
 def admin_analytics():
     hotel_id = session.get("hotel_id")
-    days = int(request.args.get("days", 30))
-    data = get_analytics(hotel_id, days=days)
+    user_id = session.get("user_id")
+
+    # Page-level period: custom range wins, else preset (default 30d).
+    if request.args.get("start") and request.args.get("end"):
+        page_period = {"start": request.args["start"], "end": request.args["end"]}
+    else:
+        page_period = request.args.get("range", "30d")
+    if not _valid_period(page_period):
+        page_period = "30d"
+    p_s, p_e, p_label = _period_bounds(page_period)
+
+    config = _load_dashboard_config(user_id)
+    rate = DEFAULT_RATE
+    try:
+        rate = float(get_hotel_info(hotel_id).get("staff_hourly_rate") or DEFAULT_RATE)
+    except (ValueError, TypeError):
+        rate = DEFAULT_RATE
+
+    live = dashboard_live(hotel_id)
+    widgets = []
+    for item in config:
+        if not item.get("enabled"):
+            continue
+        wid = item["id"]
+        pin = item.get("period")
+        if pin and WIDGET_META[wid]["kind"] not in ("live",):
+            w_s, w_e, w_label = _period_bounds(pin)
+            pinned = True
+        else:
+            w_s, w_e, w_label, pin = p_s, p_e, p_label, None
+            pinned = False
+        widgets.append(_build_widget(hotel_id, wid, w_s, w_e, rate, live, pinned, w_label, pin))
+
+    if isinstance(page_period, dict):
+        page_kind, cstart, cend = "custom", page_period["start"], page_period["end"]
+    else:
+        page_kind, cstart, cend = page_period, "", ""
+
+    catalogue = [
+        {"id": x["id"], "title": WIDGET_META[x["id"]]["title"], "enabled": x["enabled"],
+         "period": x.get("period") or "", "kind": WIDGET_META[x["id"]]["kind"]}
+        for x in config
+    ]
+
     return render_template(
         "analytics.html",
-        data=data,
-        days=days,
+        widgets=widgets,
+        catalogue=catalogue,
+        page_kind=page_kind,
+        page_label=p_label,
+        custom_start=cstart,
+        custom_end=cend,
+        rate=rate,
         title="Home",
         active_page="analytics",
     )
+
+
+@admin_bp.route("/admin/analytics/prefs", methods=["POST"])
+@login_required
+@role_required("manager")
+def admin_dashboard_prefs():
+    user_id = session.get("user_id")
+    payload = request.get_json(silent=True) or {}
+    config = payload.get("config")
+    if not isinstance(config, list):
+        return jsonify({"ok": False, "error": "invalid config"}), 400
+    cleaned, seen = [], set()
+    for x in config:
+        if not isinstance(x, dict):
+            continue
+        wid = x.get("id")
+        if wid not in WIDGET_META or wid in seen:
+            continue
+        period = x.get("period")
+        if not _valid_period(period):
+            period = None
+        cleaned.append({"id": wid, "enabled": bool(x.get("enabled", True)), "period": period})
+        seen.add(wid)
+    for wid in DEFAULT_ORDER:
+        if wid not in seen:
+            cleaned.append({"id": wid, "enabled": True, "period": None})
+    save_dashboard_prefs(user_id, json.dumps(cleaned))
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/admin/analytics/rate", methods=["POST"])
+@login_required
+@role_required("manager")
+def admin_dashboard_rate():
+    hotel_id = session.get("hotel_id")
+    payload = request.get_json(silent=True) or {}
+    try:
+        rate = float(payload.get("rate"))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "invalid rate"}), 400
+    rate = max(0.0, min(rate, 100000.0))
+    upsert_hotel_info(hotel_id, "staff_hourly_rate", str(rate))
+    return jsonify({"ok": True, "rate": rate})
 
 
 @admin_bp.route("/admin/support")

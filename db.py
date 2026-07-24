@@ -277,6 +277,18 @@ _SCHEMA = [
             " ON inbound_logs (guest_id, hotel_id, created_at)"
         ],
     ),
+    (
+        """
+        CREATE TABLE IF NOT EXISTS dashboard_prefs (
+            id {PK},
+            staff_user_id INTEGER NOT NULL UNIQUE,
+            config_json TEXT NOT NULL,
+            updated_at {TS},
+            FOREIGN KEY (staff_user_id) REFERENCES staff_users (id)
+        )
+        """,
+        ["CREATE INDEX IF NOT EXISTS idx_dashboard_prefs_user ON dashboard_prefs (staff_user_id)"],
+    ),
 ]
 
 
@@ -1294,3 +1306,224 @@ def get_analytics(hotel_id: int, days: int = 30) -> dict:
         "peak_hours_list": peak_hours_list,
         "daily_volume": daily_volume,
     }
+
+
+# ===== Customizable dashboard =====
+
+def _sql_daykey(col: str) -> str:
+    return f"TO_CHAR({col}, 'YYYY-MM-DD')" if IS_POSTGRES else f"strftime('%Y-%m-%d', {col})"
+
+
+def _sql_hour(col: str) -> str:
+    return f"EXTRACT(HOUR FROM {col})::int" if IS_POSTGRES else f"CAST(strftime('%H', {col}) AS INTEGER)"
+
+
+def _sql_mindiff(a: str, b: str) -> str:
+    if IS_POSTGRES:
+        return f"EXTRACT(EPOCH FROM ({a} - {b})) / 60"
+    return f"(julianday({a}) - julianday({b})) * 1440"
+
+
+def _sql_agemin(col: str) -> str:
+    if IS_POSTGRES:
+        return f"EXTRACT(EPOCH FROM (now() - {col})) / 60"
+    return f"(julianday('now') - julianday({col})) * 1440"
+
+
+def _bound(dt) -> str:
+    """Format a datetime for comparison against stored ISO timestamps."""
+    return dt if IS_POSTGRES else dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def get_dashboard_prefs(staff_user_id: int) -> str | None:
+    row = _fetchone("SELECT config_json FROM dashboard_prefs WHERE staff_user_id = ?", (staff_user_id,))
+    return row["config_json"] if row else None
+
+
+def save_dashboard_prefs(staff_user_id: int, config_json: str) -> None:
+    row = _fetchone("SELECT id FROM dashboard_prefs WHERE staff_user_id = ?", (staff_user_id,))
+    if row:
+        _execute(
+            "UPDATE dashboard_prefs SET config_json = ?, updated_at = ? WHERE id = ?",
+            (config_json, _now(), row["id"]),
+        )
+    else:
+        _execute(
+            "INSERT INTO dashboard_prefs (staff_user_id, config_json, updated_at) VALUES (?, ?, ?)",
+            (staff_user_id, config_json, _now()),
+        )
+
+
+def _daily_map(sql: str, params) -> dict:
+    rows = _fetchall(sql, params)
+    return {r["day"]: int(r["cnt"]) for r in rows}
+
+
+def _daily_guest_messages(hotel_id, s, e) -> dict:
+    dk = _sql_daykey("m.created_at")
+    return _daily_map(
+        f"""
+        SELECT {dk} AS day, COUNT(*) AS cnt
+        FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest'
+          AND m.created_at >= ? AND m.created_at < ?
+        GROUP BY day
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+
+
+def _daily_ai_resolved(hotel_id, s, e) -> dict:
+    dk = _sql_daykey("m.created_at")
+    md = _sql_mindiff("r.created_at", "m.created_at")
+    mt = _sql_mindiff("t.created_at", "m.created_at")
+    return _daily_map(
+        f"""
+        SELECT {dk} AS day, COUNT(*) AS cnt
+        FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest'
+          AND m.created_at >= ? AND m.created_at < ?
+          AND EXISTS (
+              SELECT 1 FROM messages r WHERE r.stay_id = m.stay_id AND r.source = 'ai'
+              AND r.created_at > m.created_at AND {md} < 2
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM tasks t WHERE t.stay_id = m.stay_id
+              AND t.created_at >= m.created_at AND {mt} < 2
+          )
+        GROUP BY day
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+
+
+def _daily_tasks_created(hotel_id, s, e) -> dict:
+    dk = _sql_daykey("t.created_at")
+    return _daily_map(
+        f"""
+        SELECT {dk} AS day, COUNT(*) AS cnt
+        FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.created_at >= ? AND t.created_at < ?
+        GROUP BY day
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+
+
+def _daily_tasks_completed(hotel_id, s, e) -> dict:
+    dk = _sql_daykey("t.completed_at")
+    return _daily_map(
+        f"""
+        SELECT {dk} AS day, COUNT(*) AS cnt
+        FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.status = 'done' AND t.completed_at IS NOT NULL
+          AND t.completed_at >= ? AND t.completed_at < ?
+        GROUP BY day
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+
+
+def dashboard_daily_counts(hotel_id: int, metric: str, s, e) -> dict:
+    """Per-day {'YYYY-MM-DD': count} map for a chartable metric over [s, e)."""
+    if metric in ("guest_messages", "inbound"):
+        return _daily_guest_messages(hotel_id, s, e)
+    if metric == "ai_resolved":
+        return _daily_ai_resolved(hotel_id, s, e)
+    if metric == "escalations":
+        return _daily_tasks_created(hotel_id, s, e)
+    if metric == "tasks_completed":
+        return _daily_tasks_completed(hotel_id, s, e)
+    return {}
+
+
+def dashboard_live(hotel_id: int) -> dict:
+    """Right-now counts for the live widgets."""
+    conv = _fetchone(
+        """
+        SELECT COUNT(*) AS cnt FROM (
+            SELECT s.id AS sid,
+                   (SELECT m.source FROM messages m WHERE m.stay_id = s.id
+                    ORDER BY m.id DESC LIMIT 1) AS last_src
+            FROM stays s WHERE s.hotel_id = ?
+        ) x WHERE last_src = 'guest'
+        """,
+        (hotel_id,),
+    )
+    open_row = _fetchone(
+        "SELECT COUNT(*) AS cnt FROM tasks t JOIN stays s ON s.id = t.stay_id "
+        "WHERE s.hotel_id = ? AND t.status = 'open'",
+        (hotel_id,),
+    )
+    age = _sql_agemin("t.created_at")
+    overdue_row = _fetchone(
+        f"""
+        SELECT COUNT(*) AS cnt FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.status = 'open' AND (
+            (t.priority IN ('urgent', 'high') AND {age} > 120) OR
+            (COALESCE(t.priority, 'normal') NOT IN ('urgent', 'high') AND {age} > 1440)
+        )
+        """,
+        (hotel_id,),
+    )
+    return {
+        "open_conversations": int(conv["cnt"]) if conv else 0,
+        "open_tasks": int(open_row["cnt"]) if open_row else 0,
+        "overdue": int(overdue_row["cnt"]) if overdue_row else 0,
+    }
+
+
+def dashboard_department(hotel_id: int, s, e) -> list:
+    rows = _fetchall(
+        """
+        SELECT t.department, COUNT(*) AS cnt FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.created_at >= ? AND t.created_at < ?
+        GROUP BY t.department ORDER BY cnt DESC
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+    return [{"department": (r["department"] or "Unassigned"), "count": int(r["cnt"])} for r in rows]
+
+
+def dashboard_peak_hours(hotel_id: int, s, e) -> list:
+    hr = _sql_hour("m.created_at")
+    rows = _fetchall(
+        f"""
+        SELECT {hr} AS hr, COUNT(*) AS cnt FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest' AND m.created_at >= ? AND m.created_at < ?
+        GROUP BY hr
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+    d = {int(r["hr"]): int(r["cnt"]) for r in rows}
+    return [d.get(h, 0) for h in range(24)]
+
+
+def dashboard_top_questions(hotel_id: int, s, e, limit: int = 8) -> list:
+    rows = _fetchall(
+        """
+        SELECT t.summary, COALESCE(t.priority, 'normal') AS priority, t.department
+        FROM tasks t JOIN stays s ON s.id = t.stay_id
+        WHERE s.hotel_id = ? AND t.created_at >= ? AND t.created_at < ? AND t.summary IS NOT NULL
+        ORDER BY CASE COALESCE(t.priority, 'normal')
+            WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 ELSE 4 END,
+            t.created_at DESC
+        LIMIT ?
+        """,
+        (hotel_id, _bound(s), _bound(e), limit),
+    )
+    return [
+        {"summary": r["summary"], "priority": r["priority"], "department": r["department"]}
+        for r in rows
+    ]
+
+
+def dashboard_unanswered(hotel_id: int, limit: int = 8) -> list:
+    rows = _fetchall(
+        """
+        SELECT guest_question, suggested_title FROM knowledge_suggestions
+        WHERE hotel_id = ? AND status = 'pending' ORDER BY id DESC LIMIT ?
+        """,
+        (hotel_id, limit),
+    )
+    return [{"question": r["guest_question"], "title": r["suggested_title"]} for r in rows]
