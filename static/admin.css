@@ -1692,13 +1692,37 @@ label {
 .dash-secondary { font-size: 12px; color: var(--muted); margin-top: 6px; }
 .dash-secondary.danger { color: var(--danger); font-weight: 600; }
 
-.rate-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.rate-label { font-size: 11px; font-weight: 600; color: var(--muted-2); text-transform: uppercase; letter-spacing: .05em; }
-.rate-input-wrap { font-size: 12px; color: var(--muted); }
-.rate-input {
-  width: 56px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 3px 6px; font-size: 13px; font-weight: 600; color: var(--text); font-family: inherit;
+/* Card head controls (gear + period pin sit together) */
+.card-head-controls { display: flex; align-items: center; gap: 6px; }
+.ts-gear { color: var(--muted-2); display: inline-flex; padding: 2px; }
+.ts-gear:hover { color: var(--accent); }
+
+/* Staff time saved — Tier 1 caption + Tier 2 breakdown */
+.ts-caption { font-size: 11.5px; color: var(--muted-2); margin-top: 6px; }
+.ts-calc-link {
+  background: none; border: none; padding: 0; font-family: inherit; font-size: 11.5px;
+  color: var(--accent); cursor: pointer; text-decoration: underline;
 }
+.ts-breakdown {
+  margin-top: 10px; background: #f8f9fb; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.ts-bd-head {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 6px;
+}
+.ts-bd-table { width: 100%; font-size: 11.5px; color: var(--text); border-collapse: collapse; }
+.ts-bd-table td { padding: 2px 0; vertical-align: top; }
+.ts-bd-count { font-weight: 700; padding-right: 8px; white-space: nowrap; text-align: right; }
+.ts-bd-label { padding-right: 8px; }
+.ts-bd-calc { color: var(--muted-2); padding: 0 8px; white-space: nowrap; }
+.ts-bd-min { text-align: right; color: var(--muted); white-space: nowrap; }
+.ts-bd-sum td { border-top: 1px solid var(--border); padding-top: 6px; font-weight: 700; }
+.ts-bd-more { display: inline-block; margin-top: 8px; font-size: 11.5px; }
+
+/* Threshold empty state — plain, matches "No tasks in this period" */
+.ts-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.ts-empty-title { font-size: 15px; font-weight: 700; color: var(--muted); }
 
 .dash-chart { position: relative; flex: 1; min-height: 92px; margin-top: 14px; }
 .peak-chart { min-height: 150px; }
@@ -1762,3 +1786,41 @@ label {
   .dash-controls { width: 100%; }
   .customize-pop, .custom-pop { right: auto; left: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   Methodology page (Tier 3)
+   ══════════════════════════════════════════════════════════ */
+.back-link { font-size: 13px; font-weight: 600; color: var(--muted); display: inline-block; margin-bottom: 8px; }
+.back-link:hover { color: var(--accent); }
+
+.save-banner {
+  background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px;
+  font-weight: 600; margin-bottom: 18px;
+}
+
+.wage-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wage-input-wrap {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px;
+}
+.wage-currency { font-size: 15px; font-weight: 700; color: var(--muted); }
+.wage-input-wrap input {
+  width: 72px; border: none; outline: none; font-family: inherit;
+  font-size: 16px; font-weight: 700; color: var(--text); background: transparent;
+}
+.wage-suffix { font-size: 13px; color: var(--muted); }
+
+.formula-line { font-size: 14px; color: var(--text); line-height: 1.55; margin-bottom: 8px; }
+
+.method-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 13.5px; }
+.method-table th {
+  text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted-2); padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border);
+}
+.method-table td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.method-table tr:last-child td { border-bottom: none; }
+.method-name { font-weight: 600; color: var(--text); white-space: nowrap; }
+.method-value { font-weight: 700; color: var(--accent); white-space: nowrap; }
+.method-why { color: var(--muted); line-height: 1.5; }
+.method-updated { margin-top: 16px; font-size: 12.5px; font-weight: 600; color: var(--muted); }

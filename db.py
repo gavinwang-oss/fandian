@@ -1437,6 +1437,35 @@ def dashboard_daily_counts(hotel_id: int, metric: str, s, e) -> dict:
     return {}
 
 
+def dashboard_ai_resolved_rows(hotel_id: int, s, e) -> list:
+    """Return one row per AI-resolved interaction in [s, e) as {day, body}.
+    Used to classify each interaction (simple/standard/complex) for the
+    staff-time-saved model. Same match as _daily_ai_resolved, but per-row so
+    the caller can categorise from the guest's message text — and later add
+    message-level drill-down without a rewrite."""
+    dk = _sql_daykey("m.created_at")
+    md = _sql_mindiff("r.created_at", "m.created_at")
+    mt = _sql_mindiff("t.created_at", "m.created_at")
+    rows = _fetchall(
+        f"""
+        SELECT {dk} AS day, m.body AS body
+        FROM messages m JOIN stays s ON s.id = m.stay_id
+        WHERE s.hotel_id = ? AND m.source = 'guest'
+          AND m.created_at >= ? AND m.created_at < ?
+          AND EXISTS (
+              SELECT 1 FROM messages r WHERE r.stay_id = m.stay_id AND r.source = 'ai'
+              AND r.created_at > m.created_at AND {md} < 2
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM tasks t WHERE t.stay_id = m.stay_id
+              AND t.created_at >= m.created_at AND {mt} < 2
+          )
+        """,
+        (hotel_id, _bound(s), _bound(e)),
+    )
+    return [{"day": r["day"], "body": r["body"] or ""} for r in rows]
+
+
 def dashboard_live(hotel_id: int) -> dict:
     """Right-now counts for the live widgets."""
     conv = _fetchone(

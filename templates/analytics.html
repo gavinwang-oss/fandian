@@ -66,16 +66,29 @@
         <div class="dash-card-desc">{{ w.desc }}</div>
       </div>
       {% if w.kind != 'live' %}
-        <select class="pin-select" data-id="{{ w.id }}" title="Time period for this widget">
-          <option value="" {% if not w.pinned %}selected{% endif %}>Follow page</option>
-          <option value="7d"  {% if w.period_value=='7d'  %}selected{% endif %}>7d</option>
-          <option value="30d" {% if w.period_value=='30d' %}selected{% endif %}>30d</option>
-          <option value="90d" {% if w.period_value=='90d' %}selected{% endif %}>90d</option>
-        </select>
+        <div class="card-head-controls">
+          {% if w.id == 'time_saved' %}
+          <a class="ts-gear" href="/admin/methodology" title="How this is calculated & wage settings">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </a>
+          {% endif %}
+          <select class="pin-select" data-id="{{ w.id }}" title="Time period for this widget">
+            <option value="" {% if not w.pinned %}selected{% endif %}>Follow page</option>
+            <option value="7d"  {% if w.period_value=='7d'  %}selected{% endif %}>7d</option>
+            <option value="30d" {% if w.period_value=='30d' %}selected{% endif %}>30d</option>
+            <option value="90d" {% if w.period_value=='90d' %}selected{% endif %}>90d</option>
+          </select>
+        </div>
       {% endif %}
     </div>
 
     {% if w.kind == 'number' %}
+      {% if w.insufficient %}
+      <div class="ts-empty">
+        <div class="ts-empty-title">Not enough data yet</div>
+        <p class="muted dash-empty">Check back after about {{ w.threshold }} guest messages{% if w.resolved_total %} — {{ w.resolved_total }} so far{% endif %}.</p>
+      </div>
+      {% else %}
       <div class="dash-value-row">
         <span class="dash-value">{{ w.value_fmt }}</span>
         {% if w.has_delta and w.delta_display %}
@@ -85,14 +98,34 @@
       <div class="dash-secondary">
         {% if w.secondary %}{{ w.secondary }}{% else %}vs previous period{% endif %}
       </div>
-      {% if w.id == 'time_saved' %}
-      <div class="rate-row">
-        <span class="rate-label">Rate</span>
-        <span class="rate-input-wrap">$<input type="number" min="0" step="1" class="rate-input" id="rate-input" value="{{ rate|int }}">/hr</span>
+      {% if w.caption %}
+      <div class="ts-caption">{{ w.caption }} · <button type="button" class="ts-calc-link" data-id="{{ w.id }}">How this is calculated</button></div>
+      {% endif %}
+      {% if w.breakdown %}
+      <div class="ts-breakdown" id="bd-{{ w.id }}" hidden>
+        <div class="ts-bd-head">How this is calculated · {{ w.period_label }}</div>
+        <table class="ts-bd-table">
+          {% for r in w.breakdown.rows %}
+          <tr>
+            <td class="ts-bd-count">{{ r.count }}</td>
+            <td class="ts-bd-label">{{ r.label }}</td>
+            <td class="ts-bd-calc">{% if r.unit is not none %}× {{ r.unit }} min{% endif %}</td>
+            <td class="ts-bd-min">{{ r.minutes }} min</td>
+          </tr>
+          {% endfor %}
+          <tr class="ts-bd-sum">
+            <td></td>
+            <td>= {{ w.breakdown.hours }} hours</td>
+            <td class="ts-bd-calc">× ${{ w.breakdown.base_wage }}/hr × {{ w.breakdown.multiplier }} loaded</td>
+            <td class="ts-bd-min">${{ w.breakdown.dollars }}</td>
+          </tr>
+        </table>
+        <a class="ts-bd-more" href="/admin/methodology">Full methodology &rarr;</a>
       </div>
       {% endif %}
       <div class="dash-chart"><canvas class="wchart" data-id="{{ w.id }}"></canvas></div>
       <script>window.__DASH=window.__DASH||{};window.__DASH['{{ w.id }}']={type:'{{ w.chart_type }}',labels:{{ w.chart_labels|tojson }},values:{{ w.chart_values|tojson }},unit:'{{ w.unit }}'};</script>
+      {% endif %}
 
     {% elif w.kind == 'live' %}
       <div class="dash-value-row"><span class="dash-value">{{ w.value_fmt }}</span></div>
@@ -310,19 +343,14 @@
     }, { offset: -Infinity, element: null }).element;
   }
 
-  // ── Editable time-saved rate ────────────────────────────
-  var rateInput = document.getElementById('rate-input');
-  if (rateInput) {
-    var commit = function () {
-      fetch('/admin/analytics/rate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rate: parseFloat(rateInput.value) || 0 })
-      }).then(function () { window.location.reload(); });
-    };
-    rateInput.addEventListener('change', commit);
-    rateInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); rateInput.blur(); } });
-  }
+  // ── Tier 2: inline "How this is calculated" breakdown ───
+  document.querySelectorAll('.ts-calc-link').forEach(function (link) {
+    link.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var bd = document.getElementById('bd-' + link.dataset.id);
+      if (bd) bd.hidden = !bd.hidden;
+    });
+  });
 })();
 </script>
 {% endblock %}

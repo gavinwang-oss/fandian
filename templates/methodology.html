@@ -1,0 +1,72 @@
+{% extends "base_admin.html" %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <a href="/admin/analytics" class="back-link">&larr; Back to dashboard</a>
+    <h2>How &ldquo;Staff time saved&rdquo; is calculated</h2>
+    <p class="page-subtitle">The model, its assumptions, and the one number we ask you for.</p>
+  </div>
+</div>
+
+{% if saved %}
+<div class="save-banner">Base wage updated. Every period on your dashboard now uses the new figure.</div>
+{% endif %}
+
+<div class="panel">
+  <h3>Your front desk base wage</h3>
+  <p class="field-hint" style="margin-bottom:12px;">
+    Tell us the hourly <strong>base wage</strong> you pay a front desk agent — the number you know
+    off the top of your head. We add payroll tax, benefits and overhead ourselves (the loaded
+    multiplier below), so you don&rsquo;t have to work out your fully-loaded cost.
+  </p>
+  <form method="post" action="/admin/methodology" class="wage-form">
+    <div class="wage-input-wrap">
+      <span class="wage-currency">$</span>
+      <input type="number" name="base_wage" min="0" step="0.5" value="{{ base_wage }}" required />
+      <span class="wage-suffix">/ hour</span>
+    </div>
+    <button class="btn" type="submit">Save</button>
+  </form>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>The formula</h3>
+  <p class="formula-line">
+    <strong>Time saved</strong> = for each AI-resolved message, the handling time for its type
+    + interruption recovery, plus partial credit for messages escalated to a human.
+  </p>
+  <p class="formula-line">
+    <strong>Value</strong> = time saved &times; your base wage &times; loaded multiplier.
+  </p>
+  <p class="field-hint" style="margin-top:10px;">
+    Message type is detected automatically from what the guest asked — you don&rsquo;t enter anything.
+    Escalated messages earn partial credit because the AI still triaged and gathered context before
+    handing off.
+  </p>
+</div>
+
+<div class="panel" style="margin-top:20px;">
+  <h3>Constants &amp; why they exist</h3>
+  <table class="method-table">
+    <thead>
+      <tr><th>Component</th><th>Default</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      {% for c in constants %}
+      <tr>
+        <td class="method-name">{{ c.name }}</td>
+        <td class="method-value">{{ c.value }}</td>
+        <td class="method-why">{{ c.rationale }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="method-updated">Methodology last updated: {{ updated }}</p>
+  <p class="field-hint" style="margin-top:6px;">
+    We recompute every period with the current constants rather than freezing old figures, since
+    we&rsquo;re still tuning the model. If a past number changes, this date tells you why.
+  </p>
+</div>
+
+{% endblock %}

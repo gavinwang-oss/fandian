@@ -51,6 +51,7 @@ from db import (
     get_dashboard_prefs,
     save_dashboard_prefs,
     dashboard_daily_counts,
+    dashboard_ai_resolved_rows,
     dashboard_live,
     dashboard_department,
     dashboard_peak_hours,
@@ -674,8 +675,61 @@ WIDGET_META = {
     "unanswered":         {"title": "Questions the AI couldn't answer", "desc": "Fix your guide", "kind": "list_u"},
 }
 DEFAULT_ORDER = list(WIDGET_META.keys())
-DEFAULT_RATE = 25.0
-MINUTES_PER_RESOLUTION = 4
+
+# ── Staff time-saved model ─────────────────────────────────────────────
+# Every value below is a tunable constant, not a magic number. When any of
+# them change materially, bump TS_METHODOLOGY_UPDATED so the visible "last
+# updated" date explains why historical figures shifted (we recompute all
+# periods with the current constants rather than snapshotting).
+TS_SIMPLE_MIN = 1.5          # wifi, checkout time, hours, directions
+TS_STANDARD_MIN = 3.0        # towels, housekeeping, amenities, task ticket
+TS_COMPLEX_MIN = 6.0         # bookings, coordination, multi-step
+TS_INTERRUPTION_MIN = 1.0    # context-switch cost per AI-resolved interaction
+TS_ESCALATION_CREDIT = 0.30  # partial credit for AI intake before a handoff
+TS_LOADED_MULTIPLIER = 1.3   # payroll tax, benefits, overhead over base wage
+TS_MIN_INTERACTIONS = 25     # below this many resolved interactions, gate the card
+DEFAULT_BASE_WAGE = 22.0     # sensible front-desk base wage; works with no setup
+TS_METHODOLOGY_UPDATED = "2026-07-28"
+
+# Interaction type is inferred from the guest's message text — no input needed
+# from the hotel. Complex is checked first (most specific), then simple; the
+# middle "standard" tier is the default. Keyword lists are config, too.
+TS_COMPLEX_KEYWORDS = [
+    "book", "booking", "reserve", "reservation", "arrange", "coordinate",
+    "car", "taxi", "uber", "airport", "sfo", "transfer", "shuttle", "pick up",
+    "pickup", "hold my bag", "hold my bags", "luggage", "store my", "schedule",
+    "appointment", "tour", "restaurant reservation", "tickets",
+]
+TS_SIMPLE_KEYWORDS = [
+    "wifi", "wi-fi", "wi fi", "password", "checkout", "check out", "check-out",
+    "check in time", "what time", "hours", "open", "close", "closing",
+    "direction", "directions", "where is", "how do i get", "address", "parking",
+    "pool hours", "breakfast time", "gym",
+]
+
+
+def _classify_interaction(body: str) -> str:
+    b = (body or "").lower()
+    if any(k in b for k in TS_COMPLEX_KEYWORDS):
+        return "complex"
+    if any(k in b for k in TS_SIMPLE_KEYWORDS):
+        return "simple"
+    return "standard"
+
+
+def _time_saved_minutes(simple, standard, complex_, resolved, escalations):
+    """Total staff-minutes saved for a set of interactions (the section-1
+    formula). `resolved` = simple+standard+complex (each incurs one
+    interruption-recovery minute)."""
+    return (simple * TS_SIMPLE_MIN
+            + standard * TS_STANDARD_MIN
+            + complex_ * TS_COMPLEX_MIN
+            + resolved * TS_INTERRUPTION_MIN
+            + escalations * TS_ESCALATION_CREDIT * TS_STANDARD_MIN)
+
+
+def _wage_fmt(w):
+    return ("%g" % w)
 
 
 def _valid_period(p):
@@ -756,7 +810,98 @@ def _load_dashboard_config(user_id):
     return result
 
 
-def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity, rate):
+def _time_saved_categories(hotel_id, s, e):
+    """Classify AI-resolved interactions over [s, e). Returns
+    (per_day {'YYYY-MM-DD': {simple,standard,complex}}, totals dict,
+    per_day escalation counts)."""
+    rows = dashboard_ai_resolved_rows(hotel_id, s, e)
+    esc_daymap = dashboard_daily_counts(hotel_id, "escalations", s, e)
+    per_day, tot = {}, {"simple": 0, "standard": 0, "complex": 0}
+    for row in rows:
+        cat = _classify_interaction(row["body"])
+        day = row["day"]
+        per_day.setdefault(day, {"simple": 0, "standard": 0, "complex": 0})
+        per_day[day][cat] += 1
+        tot[cat] += 1
+    return per_day, tot, esc_daymap
+
+
+def _build_time_saved_widget(hotel_id, s, e, prev_s, prev_e, granularity, base_wage):
+    per_day, tot, esc_daymap = _time_saved_categories(hotel_id, s, e)
+    resolved_total = tot["simple"] + tot["standard"] + tot["complex"]
+
+    # Section 5: gate at low volume with an honest empty state (same size/slot).
+    if resolved_total < TS_MIN_INTERACTIONS:
+        return {
+            "insufficient": True,
+            "threshold": TS_MIN_INTERACTIONS,
+            "resolved_total": resolved_total,
+            "has_delta": False, "delta_display": None,
+            "chart_type": "bar", "chart_labels": [], "chart_values": [], "unit": "h",
+        }
+
+    esc_total = sum(esc_daymap.values())
+    total_min = _time_saved_minutes(tot["simple"], tot["standard"], tot["complex"], resolved_total, esc_total)
+    hours = round(total_min / 60, 1)
+    dollars = round(hours * base_wage * TS_LOADED_MULTIPLIER)
+
+    # Previous period — totals only, for the delta chip.
+    _, ptot, pesc = _time_saved_categories(hotel_id, prev_s, prev_e)
+    p_resolved = ptot["simple"] + ptot["standard"] + ptot["complex"]
+    prev_hours = round(_time_saved_minutes(ptot["simple"], ptot["standard"], ptot["complex"],
+                                           p_resolved, sum(pesc.values())) / 60, 1)
+    delta = round((hours - prev_hours) / prev_hours * 100) if prev_hours else None
+
+    # Trend chart: hours saved per bucket, using the same per-interaction model.
+    series = []
+    for b in _dashboard_buckets(s, e, granularity):
+        sm = st = cx = 0
+        for k in b["keys"]:
+            c = per_day.get(k)
+            if c:
+                sm += c["simple"]; st += c["standard"]; cx += c["complex"]
+        resolved_b = sm + st + cx
+        esc_b = sum(esc_daymap.get(k, 0) for k in b["keys"])
+        series.append({"label": b["label"],
+                       "value": round(_time_saved_minutes(sm, st, cx, resolved_b, esc_b) / 60, 1)})
+
+    esc_min = round(esc_total * TS_ESCALATION_CREDIT * TS_STANDARD_MIN, 1)
+    breakdown = {
+        "rows": [
+            {"label": "simple info requests", "count": tot["simple"], "unit": TS_SIMPLE_MIN,
+             "minutes": round(tot["simple"] * TS_SIMPLE_MIN, 1)},
+            {"label": "standard requests", "count": tot["standard"], "unit": TS_STANDARD_MIN,
+             "minutes": round(tot["standard"] * TS_STANDARD_MIN, 1)},
+            {"label": "complex / multi-step", "count": tot["complex"], "unit": TS_COMPLEX_MIN,
+             "minutes": round(tot["complex"] * TS_COMPLEX_MIN, 1)},
+            {"label": "interruption recoveries", "count": resolved_total, "unit": TS_INTERRUPTION_MIN,
+             "minutes": round(resolved_total * TS_INTERRUPTION_MIN, 1)},
+            {"label": "escalations (%d%% credit)" % round(TS_ESCALATION_CREDIT * 100),
+             "count": esc_total, "unit": None, "minutes": esc_min},
+        ],
+        "hours": hours,
+        "base_wage": _wage_fmt(base_wage),
+        "multiplier": TS_LOADED_MULTIPLIER,
+        "dollars": f"{dollars:,}",
+    }
+
+    return {
+        "insufficient": False,
+        "value_fmt": f"{hours}h",
+        "secondary": f"${dollars:,} saved",
+        "caption": f"Based on ${_wage_fmt(base_wage)}/hr base wage",
+        "breakdown": breakdown,
+        "has_delta": delta is not None,
+        "delta_display": (f"{'+' if delta >= 0 else ''}{delta}%") if delta is not None else None,
+        "trend_up": (hours - prev_hours) >= 0,
+        "chart_type": "bar",
+        "chart_labels": [x["label"] for x in series],
+        "chart_values": [x["value"] for x in series],
+        "unit": "h",
+    }
+
+
+def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity):
     buckets = _dashboard_buckets(s, e, granularity)
     unit = WIDGET_META[metric].get("unit", "")
     secondary, delta_unit = None, "%"
@@ -769,7 +914,7 @@ def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity, ra
         series = [{"label": b["label"], "value": _sum_over(daymap, b["keys"])} for b in buckets]
         value_fmt = f"{value:,}"
 
-    elif metric == "ai_resolved":
+    else:  # ai_resolved
         aimap = dashboard_daily_counts(hotel_id, "ai_resolved", s, e)
         inmap = dashboard_daily_counts(hotel_id, "guest_messages", s, e)
         ai_prev = sum(dashboard_daily_counts(hotel_id, "ai_resolved", prev_s, prev_e).values())
@@ -784,16 +929,6 @@ def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity, ra
         value_fmt = f"{value}%"
         secondary = f"{ai_tot:,} of {in_tot:,} messages"
         delta_unit = "pt"
-
-    else:  # time_saved
-        aimap = dashboard_daily_counts(hotel_id, "ai_resolved", s, e)
-        ai_prev = sum(dashboard_daily_counts(hotel_id, "ai_resolved", prev_s, prev_e).values())
-        ai_tot = sum(aimap.values())
-        value = round(ai_tot * MINUTES_PER_RESOLUTION / 60, 1)
-        prev = round(ai_prev * MINUTES_PER_RESOLUTION / 60, 1)
-        series = [{"label": b["label"], "value": round(_sum_over(aimap, b["keys"]) * MINUTES_PER_RESOLUTION / 60, 1)} for b in buckets]
-        value_fmt = f"{value}h"
-        secondary = f"${round(value * rate):,} saved"
 
     if metric == "ai_resolved":
         delta = value - prev
@@ -818,7 +953,7 @@ def _build_number_widget(hotel_id, metric, s, e, prev_s, prev_e, granularity, ra
     }
 
 
-def _build_widget(hotel_id, wid, s, e, rate, live, pinned, period_label, period_value):
+def _build_widget(hotel_id, wid, s, e, base_wage, live, pinned, period_label, period_value):
     meta = WIDGET_META[wid]
     span = max(1, (e - s).days)
     granularity = "day" if span <= 31 else "week"
@@ -828,9 +963,10 @@ def _build_widget(hotel_id, wid, s, e, rate, live, pinned, period_label, period_
         "pinned": pinned, "period_label": period_label, "period_value": period_value or "",
     }
     if meta["kind"] == "number":
-        w.update(_build_number_widget(hotel_id, wid, s, e, prev_s, prev_e, granularity, rate))
         if wid == "time_saved":
-            w["rate"] = rate
+            w.update(_build_time_saved_widget(hotel_id, s, e, prev_s, prev_e, granularity, base_wage))
+        else:
+            w.update(_build_number_widget(hotel_id, wid, s, e, prev_s, prev_e, granularity))
     elif meta["kind"] == "live":
         if wid == "open_conversations":
             w["value_fmt"] = f"{live['open_conversations']:,}"
@@ -875,11 +1011,7 @@ def admin_analytics():
     p_s, p_e, p_label = _period_bounds(page_period)
 
     config = _load_dashboard_config(user_id)
-    rate = DEFAULT_RATE
-    try:
-        rate = float(get_hotel_info(hotel_id).get("staff_hourly_rate") or DEFAULT_RATE)
-    except (ValueError, TypeError):
-        rate = DEFAULT_RATE
+    base_wage = _get_base_wage(hotel_id)
 
     live = dashboard_live(hotel_id)
     widgets = []
@@ -894,7 +1026,7 @@ def admin_analytics():
         else:
             w_s, w_e, w_label, pin = p_s, p_e, p_label, None
             pinned = False
-        widgets.append(_build_widget(hotel_id, wid, w_s, w_e, rate, live, pinned, w_label, pin))
+        widgets.append(_build_widget(hotel_id, wid, w_s, w_e, base_wage, live, pinned, w_label, pin))
 
     if isinstance(page_period, dict):
         page_kind, cstart, cend = "custom", page_period["start"], page_period["end"]
@@ -915,7 +1047,6 @@ def admin_analytics():
         page_label=p_label,
         custom_start=cstart,
         custom_end=cend,
-        rate=rate,
         title="Home",
         active_page="analytics",
     )
@@ -949,19 +1080,54 @@ def admin_dashboard_prefs():
     return jsonify({"ok": True})
 
 
-@admin_bp.route("/admin/analytics/rate", methods=["POST"])
+def _get_base_wage(hotel_id):
+    try:
+        return float(get_hotel_info(hotel_id).get("base_wage") or DEFAULT_BASE_WAGE)
+    except (ValueError, TypeError):
+        return DEFAULT_BASE_WAGE
+
+
+@admin_bp.route("/admin/methodology", methods=["GET", "POST"])
 @login_required
 @role_required("manager")
-def admin_dashboard_rate():
+def admin_methodology():
+    """Tier 3: how 'Staff time saved' is calculated, plus the base-wage setting."""
     hotel_id = session.get("hotel_id")
-    payload = request.get_json(silent=True) or {}
-    try:
-        rate = float(payload.get("rate"))
-    except (ValueError, TypeError):
-        return jsonify({"ok": False, "error": "invalid rate"}), 400
-    rate = max(0.0, min(rate, 100000.0))
-    upsert_hotel_info(hotel_id, "staff_hourly_rate", str(rate))
-    return jsonify({"ok": True, "rate": rate})
+    saved = False
+    if request.method == "POST":
+        try:
+            bw = float(request.form.get("base_wage"))
+            bw = max(0.0, min(bw, 100000.0))
+            upsert_hotel_info(hotel_id, "base_wage", str(bw))
+            saved = True
+        except (ValueError, TypeError):
+            pass
+
+    constants = [
+        {"name": "Simple info request", "value": f"{_wage_fmt(TS_SIMPLE_MIN)} min",
+         "rationale": "Wifi, checkout time, hours, directions — a one-line answer."},
+        {"name": "Standard request", "value": f"{_wage_fmt(TS_STANDARD_MIN)} min",
+         "rationale": "Towels, housekeeping, amenities, a task ticket — a bit of legwork."},
+        {"name": "Complex / multi-step", "value": f"{_wage_fmt(TS_COMPLEX_MIN)} min",
+         "rationale": "Bookings, coordination, anything with follow-up."},
+        {"name": "Interruption recovery", "value": f"+{_wage_fmt(TS_INTERRUPTION_MIN)} min each",
+         "rationale": "The context-switching cost of every interruption. Deliberately conservative."},
+        {"name": "Escalated interactions", "value": f"{round(TS_ESCALATION_CREDIT * 100)}% credit",
+         "rationale": "The AI still triaged and gathered context before handing off, so it earns partial credit."},
+        {"name": "Loaded wage multiplier", "value": f"{TS_LOADED_MULTIPLIER}×",
+         "rationale": "Payroll tax, benefits and overhead sit on top of the base wage. You tell us the base; we add the burden."},
+        {"name": "Minimum data", "value": f"{TS_MIN_INTERACTIONS} interactions",
+         "rationale": "Below this we show 'not enough data yet' instead of a number too small to mean anything."},
+    ]
+    return render_template(
+        "methodology.html",
+        base_wage=_wage_fmt(_get_base_wage(hotel_id)),
+        constants=constants,
+        updated=TS_METHODOLOGY_UPDATED,
+        saved=saved,
+        title="Methodology",
+        active_page="analytics",
+    )
 
 
 @admin_bp.route("/admin/support")
