@@ -1,5 +1,6 @@
 {% extends "base_admin.html" %}
 {% block content %}
+<div class="dash-page">
 <div class="page-header dash-header">
   <div>
     <h2>Your overview</h2>
@@ -64,9 +65,7 @@
         <div class="dash-card-title">{{ w.title }}</div>
         <div class="dash-card-desc">{{ w.desc }}</div>
       </div>
-      {% if w.kind == 'live' %}
-        <span class="live-dot" title="Live"></span>
-      {% else %}
+      {% if w.kind != 'live' %}
         <select class="pin-select" data-id="{{ w.id }}" title="Time period for this widget">
           <option value="" {% if not w.pinned %}selected{% endif %}>Follow page</option>
           <option value="7d"  {% if w.period_value=='7d'  %}selected{% endif %}>7d</option>
@@ -156,11 +155,20 @@
   </div>
   {% endif %}
 </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 (function () {
   var ACCENT = '#b78a43';
+
+  // Compact tick label, e.g. 2000 -> "2k", 137.5 -> "137.5", with unit suffix.
+  function fmtTick(v, unit) {
+    var s;
+    if (Math.abs(v) >= 1000) s = (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'k';
+    else s = String(Math.round(v * 10) / 10);
+    return s + (unit || '');
+  }
 
   // ── Charts ──────────────────────────────────────────────
   function softGradient(ctx, area) {
@@ -202,8 +210,26 @@
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { maxTicksLimit: 6, color: '#9aa2b1', font: { size: 10 } } },
-          y: { display: false, beginAtZero: true }
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { maxTicksLimit: 6, color: '#9aa2b1', font: { size: 10 } }
+          },
+          y: {
+            position: 'right',
+            beginAtZero: true,
+            border: { display: false },
+            // Adaptive "nice" ticks come from Chart.js's linear scale; we only
+            // style the horizontal gridlines and right-aligned tick labels.
+            grid: { color: '#e3e8ee', lineWidth: 1, drawTicks: false },
+            ticks: {
+              maxTicksLimit: 4,
+              color: '#9aa2b1',
+              font: { size: 10 },
+              padding: 8,
+              callback: function (v) { return fmtTick(v, d.unit); }
+            }
+          }
         }
       }
     });

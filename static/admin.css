@@ -1654,18 +1654,26 @@ label {
 .switch input:checked + .slider { background: var(--accent); }
 .switch input:checked + .slider::before { transform: translateX(16px); }
 
-/* Grid */
+/* Centered page column with generous white gutters on wide screens */
+.dash-page { max-width: 1200px; margin: 0 auto; }
+
+/* Grid sits on a solid gray backing panel; the gray shows through the
+   gutters and around the edges, so cards need no border of their own. */
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  background: #f6f8fa;
+  padding: 16px;
+  border-radius: 14px;
 }
 .dash-card {
-  background: var(--panel); border: 1px solid var(--border);
+  background: var(--panel); border: none;
   border-radius: var(--radius); padding: 18px; min-height: 252px;
   display: flex; flex-direction: column;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
 }
-.dash-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.dash-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .dash-card-title { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.1px; }
 .dash-card-desc { font-size: 11.5px; color: var(--muted-2); margin-top: 2px; }
 .pin-select {
@@ -1673,16 +1681,9 @@ label {
   background: #fff; color: var(--muted); font-size: 11px; font-weight: 600;
   padding: 3px 6px; cursor: pointer; font-family: inherit;
 }
-.live-dot {
-  width: 9px; height: 9px; border-radius: 50%; background: var(--success);
-  box-shadow: 0 0 0 4px rgba(22,163,74,.15); flex-shrink: 0; margin-top: 4px;
-  animation: livepulse 1.8s infinite;
-}
-@keyframes livepulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
-
 /* Number widgets */
 .dash-value-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.dash-value { font-size: 34px; font-weight: 800; letter-spacing: -1px; color: var(--text); line-height: 1; }
+.dash-value { font-size: 25px; font-weight: 800; letter-spacing: -0.6px; color: var(--text); line-height: 1.1; }
 .dash-delta {
   font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
 }
