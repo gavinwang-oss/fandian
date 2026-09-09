@@ -53,11 +53,19 @@ const isOn = (person, day) => Object.prototype.hasOwnProperty.call(workouts, `${
 const noteOf = (person, day) => workouts[`${person}|${day}`] || "";
 
 // Toggle locally + on server, then re-render everything.
+// Celebrates when the toggle pushes that person's current week onto the goal.
 async function toggle(person, day) {
+  const curMon = iso(mondayOf(parseIso(TODAY)));
+  const before = countInWeek(person, curMon);
+
   const r = await apiToggle(person, day);
   const k = `${person}|${day}`;
   if (r.active) { if (!(k in workouts)) workouts[k] = ""; }
   else { delete workouts[k]; }
+
+  const after = countInWeek(person, curMon);
+  if (after === GOAL && after > before) fireConfetti();
+
   renderAll();
 }
 
@@ -137,6 +145,7 @@ function renderWeek() {
     const dots = Array.from({ length: GOAL }, (_, i) =>
       `<i class="${i < c ? "on" : ""}"></i>`).join("");
     const extra = c > GOAL ? ` +${c - GOAL} bonus` : "";
+    const wentToday = isOn(p.key, TODAY);
     return `<div class="wc" style="--pc:${p.color}">
       ${ring(c / GOAL, p.color, `${c}/${GOAL}`)}
       <div class="wc-info">
@@ -145,6 +154,9 @@ function renderWeek() {
         </div>
         <div class="wc-sub">${c} session${c === 1 ? "" : "s"} this week${extra}</div>
         <div class="wc-dots">${dots}</div>
+        <button class="wc-log ${wentToday ? "done" : ""}" data-person="${p.key}" data-day="${TODAY}">
+          ${wentToday ? "Logged today ✓" : "＋ Log today"}
+        </button>
       </div>
     </div>`;
   }).join("");
@@ -212,14 +224,251 @@ function renderStats() {
   col.innerHTML = `
     <div class="stat-card"><h3>Week streak</h3>${streakRows}</div>
     <div class="stat-card"><h3>${MONTHS[viewMonth]} sessions</h3>${monthRows}</div>
-    <div class="stat-card"><h3>All time</h3>${totalRows}</div>`;
+    <div class="stat-card"><h3>All time</h3>${totalRows}</div>
+    <div class="stat-card"><h3>Achievements</h3>${renderBadges()}</div>`;
+}
+
+// ---- Extra analytics (all derived from the workouts list) ----
+function allDays(person) {
+  return Object.keys(workouts)
+    .filter((k) => k.startsWith(person + "|"))
+    .map((k) => k.split("|")[1])
+    .sort();
+}
+
+// Longest run of consecutive calendar days worked out.
+function longestDayStreak(person) {
+  const days = allDays(person);
+  if (!days.length) return 0;
+  let best = 1, run = 1;
+  for (let i = 1; i < days.length; i++) {
+    const prev = parseIso(days[i - 1]);
+    const cur = parseIso(days[i]);
+    const gap = Math.round((cur - prev) / 86400000);
+    run = gap === 1 ? run + 1 : 1;
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
+// Most sessions in any single week.
+function bestWeek(person) {
+  const seen = {};
+  for (const d of allDays(person)) seen[weekKey(parseIso(d))] = (seen[weekKey(parseIso(d))] || 0) + 1;
+  return Object.values(seen).reduce((m, v) => Math.max(m, v), 0);
+}
+function hitGoalEver(person) { return bestWeek(person) >= GOAL; }
+
+// Earliest logged Monday across both people (for weekly comparisons).
+function firstMonday() {
+  const all = Object.keys(workouts).map((k) => k.split("|")[1]).sort();
+  return all.length ? mondayOf(parseIso(all[0])) : mondayOf(parseIso(TODAY));
+}
+
+// Weeks won head-to-head + weeks both hit the goal ("team weeks").
+function weekTallies() {
+  if (PEOPLE.length !== 2) return null;
+  const [a, b] = PEOPLE;
+  const res = { [a.key]: 0, [b.key]: 0, team: 0 };
+  const wk = firstMonday();
+  const cur = mondayOf(parseIso(TODAY));
+  while (wk <= cur) {
+    const ca = countInWeek(a.key, iso(wk));
+    const cb = countInWeek(b.key, iso(wk));
+    if (ca > cb) res[a.key]++;
+    else if (cb > ca) res[b.key]++;
+    if (ca >= GOAL && cb >= GOAL) res.team++;
+    wk.setDate(wk.getDate() + 7);
+  }
+  return res;
+}
+
+// ---- Hype / trash-talk banner ----
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+function renderHype() {
+  const el = document.getElementById("hype");
+  if (!el) return;
+  const total = Object.keys(workouts).length;
+  let spark = "💪", msg;
+
+  if (total === 0) {
+    spark = "🌱";
+    msg = "Empty board. Whoever logs the first workout owns the bragging rights.";
+  } else if (PEOPLE.length === 2) {
+    const [a, b] = PEOPLE;
+    const mon = iso(mondayOf(parseIso(TODAY)));
+    const ca = countInWeek(a.key, mon), cb = countInWeek(b.key, mon);
+    const aHit = ca >= GOAL, bHit = cb >= GOAL;
+    if (aHit && bHit) { spark = "🔥"; msg = pick([
+      `Both of you hit ${GOAL}× this week. Certified gym rats.`,
+      `${a.name} and ${b.name} both cleared the goal. Elite week.`]); }
+    else if (aHit || bHit) {
+      const win = aHit ? a : b, lose = aHit ? b : a, need = GOAL - (aHit ? cb : ca);
+      spark = "⏰"; msg = pick([
+        `${win.name} hit the goal. ${lose.name}'s got ${need} to go — tick tock.`,
+        `${win.name}'s done for the week. ${lose.name}, you gonna let that slide?`]);
+    } else if (ca === cb) {
+      spark = ca === 0 ? "👀" : "⚔️";
+      msg = ca === 0 ? "Fresh week, nobody's moved yet. Who goes first?"
+        : `Dead even at ${ca} each this week. Somebody break the tie.`;
+    } else {
+      const win = ca > cb ? a : b, diff = Math.abs(ca - cb);
+      spark = "📈"; msg = `${win.name} is up ${diff} this week. Don't get comfortable.`;
+    }
+  } else {
+    msg = `${total} sessions logged and counting.`;
+  }
+  el.innerHTML = `<span class="spark">${spark}</span><span>${msg}</span>`;
+}
+
+// ---- Head-to-head arena ----
+function renderHeadToHead() {
+  const el = document.getElementById("h2h");
+  if (!el || PEOPLE.length !== 2) { if (el) el.style.display = "none"; return; }
+  const [a, b] = PEOPLE;
+  const ma = monthCount(a.key, viewYear, viewMonth);
+  const mb = monthCount(b.key, viewYear, viewMonth);
+  const t = weekTallies();
+
+  const side = (p, val, lead) => `
+    <div class="h2h-side ${lead ? "lead" : ""}" style="--pc:${p.color}">
+      <div class="h2h-crown">👑</div>
+      <div class="h2h-name"><span class="dot"></span>${p.name}</div>
+      <div class="h2h-big">${val}</div>
+      <div class="h2h-cap">sessions in ${MONTHS[viewMonth]}</div>
+    </div>`;
+
+  el.style.display = "";
+  el.innerHTML = `
+    <div class="h2h-head">
+      <h2>⚔️ Head to head</h2>
+      <span class="sub">${MONTHS[viewMonth]} ${viewYear}</span>
+    </div>
+    <div class="h2h-grid">
+      ${side(a, ma, ma > mb)}
+      <div class="h2h-vs">VS</div>
+      ${side(b, mb, mb > ma)}
+    </div>
+    <div class="h2h-foot">
+      <div class="h2h-stat"><div class="n" style="color:${a.color}">${t[a.key]}</div><div class="l">${a.name} weeks won</div></div>
+      <div class="h2h-stat"><div class="n">🤝 ${t.team}</div><div class="l">team weeks</div></div>
+      <div class="h2h-stat"><div class="n" style="color:${b.color}">${t[b.key]}</div><div class="l">${b.name} weeks won</div></div>
+    </div>`;
+}
+
+// ---- Achievements ----
+const ACHIEVEMENTS = [
+  { ico: "🥇", name: "First Rep", desc: "Log your first workout", test: (p) => totalCount(p) >= 1 },
+  { ico: "📅", name: "Consistent", desc: `Hit ${GOAL}× in a week`, test: (p) => hitGoalEver(p) },
+  { ico: "🔟", name: "Double Digits", desc: "10 workouts total", test: (p) => totalCount(p) >= 10 },
+  { ico: "⚡", name: "Perfect Week", desc: "5 sessions in one week", test: (p) => bestWeek(p) >= 5 },
+  { ico: "🔥", name: "On Fire", desc: "3-week goal streak", test: (p) => weekStreak(p) >= 3 },
+  { ico: "👑", name: "Unstoppable", desc: "6-week goal streak", test: (p) => weekStreak(p) >= 6 },
+];
+
+function renderBadges() {
+  return `<div class="badges">${ACHIEVEMENTS.map((a) => {
+    const earned = PEOPLE.map((p) => a.test(p.key));
+    const anyone = earned.some(Boolean);
+    const who = PEOPLE.map((p, i) =>
+      `<i class="${earned[i] ? "on" : ""}" style="--wc:${p.color}" title="${p.name}"></i>`).join("");
+    return `<div class="badge ${anyone ? "" : "locked"}">
+      <div class="badge-ico">${a.ico}</div>
+      <div class="badge-info"><div class="badge-name">${a.name}</div><div class="badge-desc">${a.desc}</div></div>
+      <div class="badge-who">${who}</div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+// ---- Consistency heatmap (last ~53 weeks, GitHub-style) ----
+function renderHeatmap() {
+  const el = document.getElementById("heatCard");
+  if (!el) return;
+  const curMon = mondayOf(parseIso(TODAY));
+  const start = new Date(curMon); start.setDate(start.getDate() - 52 * 7);
+
+  let cells = "";
+  for (let w = 0; w <= 52; w++) {
+    for (let d = 0; d < 7; d++) {
+      const day = new Date(start); day.setDate(start.getDate() + w * 7 + d);
+      const dayIso = iso(day);
+      const who = PEOPLE.filter((p) => isOn(p.key, dayIso));
+      let style = "";
+      if (who.length === PEOPLE.length && who.length > 1) {
+        style = `background:linear-gradient(135deg, ${PEOPLE[0].color}, ${PEOPLE[1].color})`;
+      } else if (who.length === 1) {
+        style = `background:${who[0].color}`;
+      }
+      const isToday = dayIso === TODAY;
+      const names = who.map((p) => p.name).join(" & ") || "rest day";
+      cells += `<div class="heat-cell ${isToday ? "today" : ""}" style="${style}" title="${dayIso}: ${names}"></div>`;
+    }
+  }
+
+  const legendKey = (label, style) => `<span class="k" style="${style}"></span>${label}`;
+  el.innerHTML = `
+    <div class="heat-head">
+      <h2>🗓️ Last year of workouts</h2>
+      <div class="heat-legend">
+        ${legendKey("none", "")}
+        ${legendKey(PEOPLE[0].name, `background:${PEOPLE[0].color}`)}
+        ${PEOPLE[1] ? legendKey(PEOPLE[1].name, `background:${PEOPLE[1].color}`) : ""}
+        ${PEOPLE[1] ? legendKey("both", `background:linear-gradient(135deg,${PEOPLE[0].color},${PEOPLE[1].color})`) : ""}
+      </div>
+    </div>
+    <div class="heat-scroll"><div class="heat-grid">${cells}</div></div>`;
+}
+
+// ---- Confetti (dependency-free) ----
+function fireConfetti() {
+  const canvas = document.getElementById("confetti");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const DPR = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * DPR;
+  canvas.height = window.innerHeight * DPR;
+  ctx.scale(DPR, DPR);
+  const W = window.innerWidth, H = window.innerHeight;
+  const colors = ["#38bdf8", "#fb923c", "#34d399", "#facc15", "#f472b6"];
+  const parts = Array.from({ length: 140 }, () => ({
+    x: W / 2 + (Math.random() - 0.5) * 120,
+    y: H / 3,
+    vx: (Math.random() - 0.5) * 12,
+    vy: Math.random() * -12 - 4,
+    size: Math.random() * 7 + 4,
+    color: colors[(Math.random() * colors.length) | 0],
+    rot: Math.random() * Math.PI,
+    vr: (Math.random() - 0.5) * 0.3,
+  }));
+  const t0 = performance.now();
+  (function frame(now) {
+    const t = now - t0;
+    ctx.clearRect(0, 0, W, H);
+    parts.forEach((p) => {
+      p.vy += 0.4;              // gravity
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.max(0, 1 - t / 2200);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    });
+    if (t < 2200) requestAnimationFrame(frame);
+    else ctx.clearRect(0, 0, W, H);
+  })(t0);
 }
 
 function renderAll() {
   renderWho();
+  renderHype();
   renderWeek();
+  renderHeadToHead();
   renderCalendar();
   renderStats();
+  renderHeatmap();
 }
 
 // ---- Day detail sheet ----
@@ -266,6 +515,13 @@ document.getElementById("calGrid").addEventListener("click", (e) => {
   }
   const cell = e.target.closest(".day");
   if (cell) openSheet(cell.dataset.day);
+});
+
+// Quick "Log today" buttons on the week cards.
+document.getElementById("weekCards").addEventListener("click", (e) => {
+  const btn = e.target.closest(".wc-log");
+  if (!btn) return;
+  toggle(btn.dataset.person, btn.dataset.day);
 });
 
 document.getElementById("sheetBody").addEventListener("click", (e) => {

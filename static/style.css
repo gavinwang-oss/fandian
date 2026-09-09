@@ -226,3 +226,89 @@ h1, h2, h3 { font-family: "Space Grotesk", sans-serif; letter-spacing: -0.01em; 
 }
 .sp-note:focus { outline: none; border-color: var(--pc); }
 .sp-note::placeholder { color: var(--faint); }
+
+/* ============ COOL FEATURES ============ */
+
+/* ---- Hype / trash-talk banner ---- */
+.hype {
+  position: relative; z-index: 1; max-width: 1100px; margin: 0 auto 18px;
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: linear-gradient(90deg, rgba(56,189,248,0.08), rgba(251,146,60,0.08));
+  padding: 12px 18px; font-size: 14.5px; font-weight: 500; color: var(--text);
+  min-height: 46px;
+}
+.hype .spark { font-size: 18px; }
+.hype b { font-family: "Space Grotesk", sans-serif; }
+
+/* ---- Quick "log today" button on week cards ---- */
+.wc-log {
+  margin-top: 9px; display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px dashed color-mix(in srgb, var(--pc) 55%, transparent);
+  color: var(--pc); border-radius: 999px; padding: 5px 12px; font-size: 12px;
+  font-weight: 700; cursor: pointer; transition: background .15s, transform .1s;
+}
+.wc-log:hover { background: color-mix(in srgb, var(--pc) 14%, transparent); transform: translateY(-1px); }
+.wc-log.done { border-style: solid; background: color-mix(in srgb, var(--pc) 18%, transparent); }
+
+/* ---- Head-to-head arena ---- */
+.h2h {
+  position: relative; z-index: 1; max-width: 1100px; margin: 0 auto 22px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; backdrop-filter: blur(8px);
+}
+.h2h-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+.h2h-head h2 { margin: 0; font-size: 16px; }
+.h2h-head .sub { color: var(--muted); font-size: 12.5px; }
+.h2h-grid { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
+.h2h-side { text-align: center; padding: 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel-2); position: relative; transition: box-shadow .2s, border-color .2s; }
+.h2h-side.lead { border-color: var(--pc); box-shadow: 0 0 0 1px var(--pc), 0 10px 30px color-mix(in srgb, var(--pc) 22%, transparent); }
+.h2h-crown { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); font-size: 20px; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); opacity: 0; transition: opacity .2s; }
+.h2h-side.lead .h2h-crown { opacity: 1; }
+.h2h-name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
+.h2h-name .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 8px var(--pc); }
+.h2h-big { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 40px; line-height: 1.1; margin: 6px 0 2px; color: var(--pc); }
+.h2h-cap { color: var(--muted); font-size: 12px; }
+.h2h-vs { font-family: "Space Grotesk", sans-serif; font-weight: 700; color: var(--faint); font-size: 15px; }
+.h2h-foot { display: flex; justify-content: center; gap: 26px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.h2h-stat { text-align: center; }
+.h2h-stat .n { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 18px; }
+.h2h-stat .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---- Achievements ---- */
+.badges { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.badge {
+  display: flex; align-items: center; gap: 12px; padding: 10px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2);
+}
+.badge.locked { opacity: 0.45; filter: grayscale(0.7); }
+.badge-ico { font-size: 22px; width: 34px; text-align: center; }
+.badge-info { flex: 1; min-width: 0; }
+.badge-name { font-weight: 700; font-size: 13.5px; font-family: "Space Grotesk", sans-serif; }
+.badge-desc { color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+.badge-who { display: flex; gap: 5px; }
+.badge-who i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.12); }
+.badge-who i.on { background: var(--wc); box-shadow: 0 0 7px var(--wc); }
+
+/* ---- Heatmap ---- */
+.heat-card {
+  position: relative; z-index: 1; max-width: 1100px; margin: 22px auto 0;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; backdrop-filter: blur(8px);
+}
+.heat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+.heat-head h2 { margin: 0; font-size: 16px; }
+.heat-legend { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.heat-legend .k { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+.heat-scroll { overflow-x: auto; padding-bottom: 6px; }
+.heat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); gap: 3px; }
+.heat-cell { width: 13px; height: 13px; border-radius: 3px; background: rgba(255,255,255,0.05); }
+.heat-cell.today { outline: 1.5px solid var(--text); outline-offset: 1px; }
+
+/* ---- Confetti ---- */
+.confetti-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 100; }
+
+@media (max-width: 560px) {
+  .h2h-big { font-size: 32px; }
+  .h2h-foot { gap: 16px; }
+}
