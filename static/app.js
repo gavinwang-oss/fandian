@@ -562,3 +562,69 @@ document.getElementById("todayBtn").addEventListener("click", () => {
   await loadWorkouts();
   renderAll();
 })();
+
+// ==================== JUMPSCARE ====================
+// Random full-screen scare using static/jumpscare.jpg, with a synthesized
+// scream. Does nothing if the image is missing.
+(function () {
+  const el = document.getElementById("jumpscare");
+  if (!el) return;
+  const src = el.querySelector("img") ? el.querySelector("img").src : null;
+
+  // Only arm once we know the image actually loads.
+  let ready = false;
+  if (src) {
+    const probe = new Image();
+    probe.onload = () => { ready = true; schedule(); };
+    probe.onerror = () => { ready = false; };
+    probe.src = src;
+  }
+
+  // WebAudio scream — needs a user gesture first (browser autoplay policy).
+  let actx = null;
+  function initAudio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  document.addEventListener("pointerdown", initAudio);
+  document.addEventListener("keydown", initAudio);
+
+  function scream() {
+    if (!actx) return;
+    const t = actx.currentTime, dur = 0.7;
+    // harsh noise burst
+    const n = actx.sampleRate * dur;
+    const buf = actx.createBuffer(1, n, actx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.4);
+    const noise = actx.createBufferSource(); noise.buffer = buf;
+    const ng = actx.createGain(); ng.gain.value = 0.4;
+    noise.connect(ng).connect(actx.destination);
+    // descending shriek
+    const osc = actx.createOscillator(); osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(920, t);
+    osc.frequency.exponentialRampToValueAtTime(110, t + dur);
+    const og = actx.createGain();
+    og.gain.setValueAtTime(0.35, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(og).connect(actx.destination);
+    noise.start(t); noise.stop(t + dur); osc.start(t); osc.stop(t + dur);
+  }
+
+  function fire() {
+    if (!ready || document.hidden) return;
+    el.hidden = false;
+    el.classList.add("active");
+    scream();
+    setTimeout(() => { el.classList.remove("active"); el.hidden = true; }, 950);
+  }
+
+  function schedule() {
+    // random gap: every ~25–75 seconds
+    const delay = 25000 + Math.random() * 50000;
+    setTimeout(() => { fire(); schedule(); }, delay);
+  }
+
+  // expose for manual testing in the console
+  window.__jumpscare = fire;
+})();

@@ -19,7 +19,9 @@
 
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark">🏋️</span>
+      <span class="brand-mark" id="brandMark"><img
+        src="{{ url_for('static', filename='jumpscare.jpg') }}" alt=""
+        onerror="this.remove(); this.parentElement.textContent='🏋️';"></span>
       <div>
         <h1>GYM&nbsp;TRACKER</h1>
         <p class="tagline">Gavin &amp; Devin</p>
@@ -75,6 +77,11 @@
 
   <!-- Confetti canvas for goal celebrations -->
   <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
+
+  <!-- Jumpscare overlay (random) -->
+  <div id="jumpscare" class="jumpscare" hidden aria-hidden="true">
+    <img src="{{ url_for('static', filename='jumpscare.jpg') }}" alt="">
+  </div>
 
   <!-- Day detail sheet -->
   <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
