@@ -1,11 +1,4 @@
 flask
-flask-compress
 gunicorn
 python-dotenv
-requests
-twilio
-hnswlib
 psycopg2-binary
-werkzeug
-APScheduler>=3.10.0
-phonenumbers

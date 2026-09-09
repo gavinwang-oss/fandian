@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f1a" />
+  <title>Gym Tracker · Gavin & Devin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body
+  data-today="{{ today }}"
+  data-goal="{{ weekly_goal }}"
+  data-people='[{% for p in people %}{"key":"{{ p.key }}","name":"{{ p.name }}","color":"{{ p.color }}"}{% if not loop.last %},{% endif %}{% endfor %}]'
+>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">🏋️</span>
+      <div>
+        <h1>GYM&nbsp;TRACKER</h1>
+        <p class="tagline">Gavin &amp; Devin</p>
+      </div>
+    </div>
+
+    <div class="who" id="who">
+      <span class="who-label">Logging as</span>
+      {% for p in people %}
+      <button class="who-chip" data-person="{{ p.key }}" style="--pc: {{ p.color }}">
+        <span class="who-dot"></span>{{ p.name }}
+      </button>
+      {% endfor %}
+    </div>
+  </header>
+
+  <!-- This week -->
+  <section class="week-panel" id="weekPanel">
+    <div class="week-head">
+      <h2>This week</h2>
+      <span class="week-range" id="weekRange"></span>
+    </div>
+    <div class="week-cards" id="weekCards"></div>
+  </section>
+
+  <main class="layout">
+    <!-- Calendar -->
+    <section class="cal-card">
+      <div class="cal-head">
+        <button class="nav-btn" id="prevMonth" aria-label="Previous month">‹</button>
+        <h2 id="monthLabel"></h2>
+        <button class="nav-btn" id="nextMonth" aria-label="Next month">›</button>
+        <button class="today-btn" id="todayBtn">Today</button>
+      </div>
+      <div class="cal-dow">
+        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+
+    <!-- Stats -->
+    <aside class="stats-col" id="statsCol"></aside>
+  </main>
+
+  <!-- Day detail sheet -->
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+  <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <h3 id="sheetDate"></h3>
+      <button class="sheet-close" id="sheetClose" aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
