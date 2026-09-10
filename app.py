@@ -106,6 +106,27 @@ def init_db():
         )
         """
     )
+    migrate()
+
+
+def migrate():
+    """Idempotent schema fixes on an existing (persistent) database.
+
+    Early versions gave `users` a NOT NULL `password_hash`. The app no longer
+    uses passwords, so new-user INSERTs would violate that constraint. Drop the
+    column if it's still there. Safe to run on every startup."""
+    if USE_PG:
+        try:
+            query("ALTER TABLE users DROP COLUMN IF EXISTS password_hash")
+        except Exception:
+            pass
+    else:
+        # SQLite only supports DROP COLUMN on newer versions; ignore if it fails
+        # (a fresh SQLite file already has the current schema).
+        try:
+            query("ALTER TABLE users DROP COLUMN password_hash")
+        except Exception:
+            pass
 
 
 def valid_date(s):
