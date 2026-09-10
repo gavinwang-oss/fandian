@@ -3,7 +3,14 @@ const BODY = document.body;
 const PEOPLE = JSON.parse(BODY.dataset.people);
 const ME = JSON.parse(BODY.dataset.me);          // the logged-in user
 const GOAL = parseInt(BODY.dataset.goal, 10) || 3;
-const TODAY = BODY.dataset.today;                // "YYYY-MM-DD"
+// "Today" is the viewer's LOCAL date, not the server's (Render runs on UTC, which
+// rolls over hours ahead of the Americas). Computed self-contained since the date
+// helpers below aren't defined yet.
+const TODAY = (() => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
 const PERSON_BY_KEY = Object.fromEntries(PEOPLE.map((p) => [p.key, p]));
 
 // ---- State ----
