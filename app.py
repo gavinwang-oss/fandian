@@ -128,6 +128,16 @@ def migrate():
         except Exception:
             pass
 
+    # Remove throwaway players created by deploy smoke-tests.
+    try:
+        ids = query("SELECT id FROM users WHERE username LIKE 'deploytest\\_%' ESCAPE '\\'",
+                    fetch="all") or []
+        for row in ids:
+            query("DELETE FROM workouts WHERE person=?", (str(row["id"]),))
+        query("DELETE FROM users WHERE username LIKE 'deploytest\\_%' ESCAPE '\\'")
+    except Exception:
+        pass
+
 
 def valid_date(s):
     if not s or not DATE_RE.match(s):
