@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Log in · Gym Tracker</title>
+  <title>Gym Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
@@ -12,18 +12,15 @@
   <div class="bg-glow" aria-hidden="true"></div>
   <div class="auth-card">
     <div class="auth-brand"><span class="brand-mark">🏋️</span><h1>GYM TRACKER</h1></div>
-    <p class="auth-sub">Welcome back. Log your gym days, keep the streak.</p>
+    <p class="auth-sub">Type your name to jump in. New name = new player. Same name = welcome back.</p>
     {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
     <form method="post" class="auth-form">
-      <label>Username
-        <input name="username" value="{{ username }}" autocomplete="username" autofocus required>
+      <label>Your name
+        <input name="name" value="{{ name }}" placeholder="e.g. Devin" autocomplete="off" autofocus required>
       </label>
-      <label>Password
-        <input name="password" type="password" autocomplete="current-password" required>
-      </label>
-      <button type="submit" class="auth-btn">Log in</button>
+      <button type="submit" class="auth-btn">Let's go →</button>
     </form>
-    <p class="auth-alt">No account yet? <a href="{{ url_for('signup') }}">Create one →</a></p>
+    <p class="auth-alt">No passwords. It's just us. 💪</p>
   </div>
 </body>
 </html>

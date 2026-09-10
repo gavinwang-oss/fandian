@@ -15,7 +15,6 @@ from functools import wraps
 
 from flask import (Flask, jsonify, redirect, render_template, request,
                    session, url_for)
-from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from dotenv import load_dotenv
@@ -33,7 +32,12 @@ COLORS = ["#38bdf8", "#fb923c", "#34d399", "#a78bfa", "#f472b6",
           "#facc15", "#f87171", "#2dd4bf", "#c084fc", "#4ade80"]
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
+NAME_RE = re.compile(r"^[A-Za-z0-9 _.'\-]{1,30}$")
+
+
+def normalize_name(name):
+    """Match names case-insensitively, ignoring extra spaces."""
+    return " ".join(name.strip().lower().split())
 
 # --- Database backend -------------------------------------------------------
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -83,10 +87,9 @@ def init_db():
         f"""
         CREATE TABLE IF NOT EXISTS users (
             {id_col},
-            username      TEXT UNIQUE NOT NULL,
-            display_name  TEXT NOT NULL,
+            username      TEXT UNIQUE NOT NULL,   -- normalized name (match key)
+            display_name  TEXT NOT NULL,          -- name as typed
             color         TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
             created_at    TEXT NOT NULL
         )
         """
@@ -127,7 +130,7 @@ def current_user():
 @app.before_request
 def require_login():
     # Public endpoints; everything else needs a session.
-    if request.endpoint in {"login", "signup", "static"}:
+    if request.endpoint in {"login", "static"}:
         return
     if not session.get("uid"):
         if request.path.startswith("/api/"):
@@ -135,57 +138,36 @@ def require_login():
         return redirect(url_for("login"))
 
 
-@app.route("/signup", methods=["GET", "POST"])
-def signup():
-    if session.get("uid"):
-        return redirect(url_for("index"))
-    if request.method == "POST":
-        username = request.form.get("username", "").strip().lower()
-        display = request.form.get("display_name", "").strip() or username.title()
-        pw = request.form.get("password", "")
-
-        error = None
-        if not USERNAME_RE.match(username):
-            error = "Username must be 3–20 chars: lowercase letters, numbers, underscore."
-        elif len(pw) < 6:
-            error = "Password must be at least 6 characters."
-        elif query("SELECT id FROM users WHERE username=?", (username,), fetch="one"):
-            error = "That username is taken."
-
-        if error:
-            return render_template("signup.html", error=error,
-                                   username=username, display_name=display)
-
-        n = query("SELECT COUNT(*) AS c FROM users", fetch="one")["c"]
-        color = COLORS[n % len(COLORS)]
-        query(
-            "INSERT INTO users (username, display_name, color, password_hash, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (username, display[:40], color, generate_password_hash(pw),
-             datetime.utcnow().isoformat()),
-        )
-        row = query("SELECT id FROM users WHERE username=?", (username,), fetch="one")
-        session["uid"] = row["id"]
-        return redirect(url_for("index"))
-
-    return render_template("signup.html", error=None, username="", display_name="")
-
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """No passwords — just type your name. New name = new person; existing name
+    (case-insensitive) logs you in as them. Fine for a private friends' board."""
     if session.get("uid"):
         return redirect(url_for("index"))
     if request.method == "POST":
-        username = request.form.get("username", "").strip().lower()
-        pw = request.form.get("password", "")
-        u = query("SELECT id, password_hash FROM users WHERE username=?",
-                  (username,), fetch="one")
-        if u and check_password_hash(u["password_hash"], pw):
-            session["uid"] = u["id"]
-            return redirect(url_for("index"))
-        return render_template("login.html", error="Wrong username or password.",
-                               username=username)
-    return render_template("login.html", error=None, username="")
+        raw = request.form.get("name", "")
+        name = " ".join(raw.strip().split())[:30]
+        norm = normalize_name(raw)
+
+        if not name or not NAME_RE.match(name):
+            return render_template("login.html", name=raw,
+                                   error="Enter a name (letters, numbers, spaces).")
+
+        u = query("SELECT id FROM users WHERE username=?", (norm,), fetch="one")
+        if not u:
+            n = query("SELECT COUNT(*) AS c FROM users", fetch="one")["c"]
+            color = COLORS[n % len(COLORS)]
+            query(
+                "INSERT INTO users (username, display_name, color, created_at) "
+                "VALUES (?,?,?,?)",
+                (norm, name, color, datetime.utcnow().isoformat()),
+            )
+            u = query("SELECT id FROM users WHERE username=?", (norm,), fetch="one")
+
+        session["uid"] = u["id"]
+        return redirect(url_for("index"))
+
+    return render_template("login.html", error=None, name="")
 
 
 @app.route("/logout")

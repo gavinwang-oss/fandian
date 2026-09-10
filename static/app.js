@@ -660,7 +660,10 @@ document.getElementById("todayBtn").addEventListener("click", () => {
   }
 
   function fire() {
-    if (!ready || document.hidden) return;
+    // Never show the overlay unless the image is genuinely loaded — otherwise
+    // it's just a black screen with a broken-image icon.
+    const img = el.querySelector("img");
+    if (!ready || document.hidden || !img || !img.complete || img.naturalWidth === 0) return;
     el.hidden = false;
     el.classList.add("active");
     scream();
