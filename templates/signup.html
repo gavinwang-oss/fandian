@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign up · Gym Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="auth-body">
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="auth-card">
+    <div class="auth-brand"><span class="brand-mark">🏋️</span><h1>GYM TRACKER</h1></div>
+    <p class="auth-sub">Make an account and join the board. Everyone competes together.</p>
+    {% if error %}<div class="auth-error">{{ error }}</div>{% endif %}
+    <form method="post" class="auth-form">
+      <label>Display name
+        <input name="display_name" value="{{ display_name }}" placeholder="Devin" autofocus>
+      </label>
+      <label>Username
+        <input name="username" value="{{ username }}" placeholder="devin" autocomplete="username" required>
+        <span class="auth-hint">lowercase letters, numbers, underscore · 3–20 chars</span>
+      </label>
+      <label>Password
+        <input name="password" type="password" autocomplete="new-password" required>
+        <span class="auth-hint">at least 6 characters</span>
+      </label>
+      <button type="submit" class="auth-btn">Create account</button>
+    </form>
+    <p class="auth-alt">Already have one? <a href="{{ url_for('login') }}">Log in →</a></p>
+  </div>
+</body>
+</html>

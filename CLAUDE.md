@@ -1,9 +1,11 @@
 # CLAUDE.md — Gym Tracker (Gavin & Devin)
 
 ## What this is
-A tiny shared gym tracker for two people, Gavin and Devin. Goal: hit the gym
-**3 days a week**. Log workout days on a month calendar, see this week's progress
-toward the goal, and keep week-streaks going.
+A shared gym tracker. Anyone with the link can create an account; everyone who
+signs up joins the **same board** and competes together. Goal: hit the gym
+**3 days a week**. Log workout days on a month calendar, see this week's progress,
+keep week-streaks going, and talk trash. Head-to-head for 2 people becomes a
+leaderboard at 3+.
 
 The previous project in this repo (an AI hotel SMS concierge) has been moved to
 `_archive_hotel_concierge/` and is no longer part of the app.
@@ -15,17 +17,26 @@ The previous project in this repo (an AI hotel SMS concierge) has been moved to
 - No auth. A "Logging as" toggle picks who a click applies to.
 
 ## Data model
-`workouts(id, person, day 'YYYY-MM-DD', notes, created_at)`, unique on
-`(person, day)`. A row existing = that person worked out that day.
+- `users(id, username, display_name, color, password_hash, created_at)` — accounts.
+- `workouts(id, person, day 'YYYY-MM-DD', notes, created_at)`, unique on
+  `(person, day)`. `person` is the user **id as text**. A row existing = that
+  user worked out that day.
+
+## Auth
+- Public signup at `/signup`, login `/login`, logout `/logout`. Passwords hashed
+  with werkzeug. Session via `FLASK_SECRET_KEY` (set it in prod!). `before_request`
+  gates everything except login/signup/static.
+- Colors auto-assigned from a palette in signup order.
+- You can only log **yourself**: `/api/toggle` and `/api/note` use the session
+  user, ignoring any `person` in the body.
 
 ## API
-- `GET  /api/workouts` — all logged workouts (frontend derives calendar/streaks).
-- `POST /api/toggle` `{person, day}` — add/remove a workout day.
-- `POST /api/note`   `{person, day, notes}` — set notes (creates the day if needed).
+- `GET  /api/workouts` — all users' workouts (frontend derives everything).
+- `POST /api/toggle` `{day}` — add/remove YOUR workout that day.
+- `POST /api/note`   `{day, notes}` — set YOUR note (creates the day if needed).
 
-## People / goal
-Configured at the top of `app.py`: `PEOPLE` (key, name, color) and `WEEKLY_GOAL`
-(default 3, overridable via the `WEEKLY_GOAL` env var). Weeks run Monday–Sunday.
+## Goal
+`WEEKLY_GOAL` env var (default 3). Weeks run Monday–Sunday.
 
 ## Run
 ```bash

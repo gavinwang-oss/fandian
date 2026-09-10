@@ -1,13 +1,15 @@
 // ---- Config from the server (rendered into <body>) ----
 const BODY = document.body;
 const PEOPLE = JSON.parse(BODY.dataset.people);
+const ME = JSON.parse(BODY.dataset.me);          // the logged-in user
 const GOAL = parseInt(BODY.dataset.goal, 10) || 3;
 const TODAY = BODY.dataset.today;                // "YYYY-MM-DD"
 const PERSON_BY_KEY = Object.fromEntries(PEOPLE.map((p) => [p.key, p]));
 
 // ---- State ----
 let workouts = {};           // "person|day" -> notes (string)
-let activePerson = PEOPLE[0].key;
+// You can only log yourself; the active person is always the logged-in user.
+const activePerson = ME.key;
 let viewYear, viewMonth;     // month currently shown (month = 0-11)
 
 // ---- Date helpers (all local, ISO strings) ----
@@ -154,9 +156,9 @@ function renderWeek() {
         </div>
         <div class="wc-sub">${c} session${c === 1 ? "" : "s"} this week${extra}</div>
         <div class="wc-dots">${dots}</div>
-        <button class="wc-log ${wentToday ? "done" : ""}" data-person="${p.key}" data-day="${TODAY}">
+        ${p.key === ME.key ? `<button class="wc-log ${wentToday ? "done" : ""}" data-person="${p.key}" data-day="${TODAY}">
           ${wentToday ? "Logged today ✓" : "＋ Log today"}
-        </button>
+        </button>` : ""}
       </div>
     </div>`;
   }).join("");
@@ -182,8 +184,10 @@ function renderCalendar() {
     const pills = PEOPLE.map((p) => {
       const on = isOn(p.key, dayIso);
       const hasNote = on && noteOf(p.key, dayIso).trim();
-      return `<button class="pill ${on ? "on" : ""} ${hasNote ? "has-note" : ""}"
-        style="--pc:${p.color}" data-person="${p.key}" data-day="${dayIso}"
+      const mine = p.key === ME.key;
+      // Only your own pills are clickable; everyone else's are read-only.
+      return `<button class="pill ${on ? "on" : ""} ${hasNote ? "has-note" : ""} ${mine ? "" : "readonly"}"
+        style="--pc:${p.color}" ${mine ? `data-person="${p.key}" data-day="${dayIso}"` : ""}
         title="${p.name}">${p.name[0]}</button>`;
     }).join("");
 
@@ -316,16 +320,51 @@ function renderHype() {
       const win = ca > cb ? a : b, diff = Math.abs(ca - cb);
       spark = "📈"; msg = `${win.name} is up ${diff} this week. Don't get comfortable.`;
     }
+  } else if (PEOPLE.length === 1) {
+    const mon = iso(mondayOf(parseIso(TODAY)));
+    const c = countInWeek(ME.key, mon);
+    spark = c >= GOAL ? "🔥" : "💪";
+    msg = c >= GOAL ? `${c}× this week — goal crushed. Invite a friend to race.`
+      : `${c}/${GOAL} this week. Send the link to a friend and make it a competition.`;
   } else {
-    msg = `${total} sessions logged and counting.`;
+    // 3+ people: who's leading this week?
+    const mon = iso(mondayOf(parseIso(TODAY)));
+    const ranked = PEOPLE.map((p) => ({ p, c: countInWeek(p.key, mon) })).sort((x, y) => y.c - x.c);
+    const top = ranked[0];
+    if (top.c === 0) { spark = "👀"; msg = "Fresh week, nobody's logged yet. Who moves first?"; }
+    else if (ranked[1] && ranked[1].c === top.c) { spark = "⚔️"; msg = `It's a ${top.c}-way tie at the top this week. Break it.`; }
+    else { spark = "👑"; msg = `${top.p.name} leads the week with ${top.c}. Everyone else is chasing.`; }
   }
   el.innerHTML = `<span class="spark">${spark}</span><span>${msg}</span>`;
+}
+
+// ---- Leaderboard (3+ people) ----
+function renderLeaderboard(el) {
+  const ranked = PEOPLE.map((p) => ({ p, c: monthCount(p.key, viewYear, viewMonth) }))
+    .sort((x, y) => y.c - x.c);
+  const max = Math.max(1, ranked[0].c);
+  const medals = ["🥇", "🥈", "🥉"];
+  el.style.display = "";
+  el.innerHTML = `
+    <div class="h2h-head">
+      <h2>🏆 Leaderboard</h2>
+      <span class="sub">${MONTHS[viewMonth]} ${viewYear}</span>
+    </div>
+    <div class="lb">${ranked.map((r, i) => `
+      <div class="lb-row ${r.p.key === ME.key ? "me" : ""}" style="--pc:${r.p.color}">
+        <span class="lb-rank">${medals[i] || (i + 1)}</span>
+        <span class="lb-name"><span class="dot"></span>${r.p.name}</span>
+        <span class="lb-bar"><i style="width:${(r.c / max) * 100}%"></i></span>
+        <span class="lb-n">${r.c}</span>
+      </div>`).join("")}</div>`;
 }
 
 // ---- Head-to-head arena ----
 function renderHeadToHead() {
   const el = document.getElementById("h2h");
-  if (!el || PEOPLE.length !== 2) { if (el) el.style.display = "none"; return; }
+  if (!el) return;
+  if (PEOPLE.length < 2) { el.style.display = "none"; return; }
+  if (PEOPLE.length > 2) { return renderLeaderboard(el); }
   const [a, b] = PEOPLE;
   const ma = monthCount(a.key, viewYear, viewMonth);
   const mb = monthCount(b.key, viewYear, viewMonth);
@@ -395,8 +434,8 @@ function renderHeatmap() {
       const dayIso = iso(day);
       const who = PEOPLE.filter((p) => isOn(p.key, dayIso));
       let style = "";
-      if (who.length === PEOPLE.length && who.length > 1) {
-        style = `background:linear-gradient(135deg, ${PEOPLE[0].color}, ${PEOPLE[1].color})`;
+      if (who.length >= 2) {
+        style = `background:linear-gradient(135deg, ${who[0].color}, ${who[who.length - 1].color})`;
       } else if (who.length === 1) {
         style = `background:${who[0].color}`;
       }
@@ -480,17 +519,31 @@ function openSheet(dayIso) {
   document.getElementById("sheetDate").textContent =
     d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
-  document.getElementById("sheetBody").innerHTML = PEOPLE.map((p) => {
+  // Put the logged-in user first; only their row is editable.
+  const ordered = [...PEOPLE].sort((a, b) => (a.key === ME.key ? -1 : b.key === ME.key ? 1 : 0));
+  document.getElementById("sheetBody").innerHTML = ordered.map((p) => {
     const on = isOn(p.key, dayIso);
+    const mine = p.key === ME.key;
+    const note = noteOf(p.key, dayIso);
+    if (!mine) {
+      // Read-only view of someone else's day.
+      return `<div class="sheet-person" style="--pc:${p.color}">
+        <div class="sp-head">
+          <span class="sp-name"><span class="dot"></span>${p.name}</span>
+          <span class="sp-status ${on ? "on" : ""}">${on ? "Worked out ✓" : "Rest day"}</span>
+        </div>
+        ${on && note.trim() ? `<div class="sp-note-ro">${note.replace(/</g, "&lt;")}</div>` : ""}
+      </div>`;
+    }
     return `<div class="sheet-person" style="--pc:${p.color}">
       <div class="sp-head">
-        <span class="sp-name"><span class="dot"></span>${p.name}</span>
+        <span class="sp-name"><span class="dot"></span>${p.name} <span class="sp-you">you</span></span>
         <button class="sp-toggle ${on ? "on" : ""}" data-person="${p.key}" data-day="${dayIso}">
           ${on ? "Worked out ✓" : "Mark workout"}
         </button>
       </div>
-      <textarea class="sp-note" placeholder="What did ${p.name} train? (legs, push, run…)"
-        data-person="${p.key}" data-day="${dayIso}">${noteOf(p.key, dayIso)}</textarea>
+      <textarea class="sp-note" placeholder="What did you train? (legs, push, run…)"
+        data-person="${p.key}" data-day="${dayIso}">${note}</textarea>
     </div>`;
   }).join("");
 
@@ -499,16 +552,11 @@ function openSheet(dayIso) {
 function closeSheet() { sheet.hidden = true; backdrop.hidden = true; }
 
 // ---- Events ----
-document.getElementById("who").addEventListener("click", (e) => {
-  const chip = e.target.closest(".who-chip");
-  if (!chip) return;
-  activePerson = chip.dataset.person;
-  renderWho();
-});
-
 document.getElementById("calGrid").addEventListener("click", (e) => {
-  const pill = e.target.closest(".pill");
-  if (pill) {
+  // Only your own (non-readonly) pills carry data-person; readonly pills fall
+  // through to open the day sheet.
+  const pill = e.target.closest(".pill:not(.readonly)");
+  if (pill && pill.dataset.person) {
     e.stopPropagation();
     toggle(pill.dataset.person, pill.dataset.day);
     return;

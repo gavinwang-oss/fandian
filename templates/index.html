@@ -13,6 +13,7 @@
 <body
   data-today="{{ today }}"
   data-goal="{{ weekly_goal }}"
+  data-me='{"key":"{{ me.key }}","name":"{{ me.name }}","color":"{{ me.color }}"}'
   data-people='[{% for p in people %}{"key":"{{ p.key }}","name":"{{ p.name }}","color":"{{ p.color }}"}{% if not loop.last %},{% endif %}{% endfor %}]'
 >
   <div class="bg-glow" aria-hidden="true"></div>
@@ -24,17 +25,13 @@
         onerror="this.remove(); this.parentElement.textContent='🏋️';"></span>
       <div>
         <h1>GYM&nbsp;TRACKER</h1>
-        <p class="tagline">Gavin &amp; Devin</p>
+        <p class="tagline">Log in. Log your lifts. Talk your talk.</p>
       </div>
     </div>
 
-    <div class="who" id="who">
-      <span class="who-label">Logging as</span>
-      {% for p in people %}
-      <button class="who-chip" data-person="{{ p.key }}" style="--pc: {{ p.color }}">
-        <span class="who-dot"></span>{{ p.name }}
-      </button>
-      {% endfor %}
+    <div class="userbar">
+      <span class="me" style="--pc: {{ me.color }}"><span class="who-dot"></span>{{ me.name }}</span>
+      <a class="logout" href="{{ url_for('logout') }}">Log out</a>
     </div>
   </header>
 

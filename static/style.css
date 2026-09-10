@@ -340,3 +340,70 @@ h1, h2, h3 { font-family: "Space Grotesk", sans-serif; letter-spacing: -0.01em; 
 @media (prefers-reduced-motion: reduce) {
   .jumpscare.active img, .jumpscare.active { animation: none; }
 }
+
+/* ============ AUTH PAGES ============ */
+.auth-body { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+.auth-card {
+  position: relative; z-index: 1; width: min(400px, 100%);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 30px 28px; box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+.auth-brand { display: flex; align-items: center; gap: 12px; }
+.auth-brand h1 { margin: 0; font-size: 20px; }
+.auth-sub { color: var(--muted); font-size: 13.5px; margin: 10px 0 20px; }
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.auth-form input {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 11px 13px; font-size: 15px; font-family: inherit;
+}
+.auth-form input:focus { outline: none; border-color: var(--gavin); }
+.auth-hint { font-weight: 400; font-size: 11.5px; color: var(--faint); }
+.auth-btn {
+  margin-top: 4px; background: linear-gradient(135deg, var(--gavin), #0ea5e9);
+  color: #06121f; border: none; border-radius: 10px; padding: 12px;
+  font-size: 15px; font-weight: 700; font-family: "Space Grotesk", sans-serif; cursor: pointer;
+  transition: transform .1s, box-shadow .15s;
+}
+.auth-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(56,189,248,0.35); }
+.auth-alt { text-align: center; color: var(--muted); font-size: 13px; margin: 18px 0 0; }
+.auth-alt a { color: var(--gavin); text-decoration: none; font-weight: 600; }
+.auth-error {
+  background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4);
+  color: #fca5a5; border-radius: 10px; padding: 10px 13px; font-size: 13px; margin-bottom: 16px;
+}
+
+/* ---- Logged-in user chip + logout in header ---- */
+.userbar { display: flex; align-items: center; gap: 10px; }
+.userbar .me {
+  display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px;
+  background: color-mix(in srgb, var(--pc) 14%, transparent);
+}
+.userbar .me .who-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 10px var(--pc); }
+.userbar .logout {
+  color: var(--muted); font-size: 13px; text-decoration: none; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 999px; padding: 8px 13px; transition: color .15s, border-color .15s;
+}
+.userbar .logout:hover { color: var(--text); border-color: var(--border-strong); }
+
+/* Read-only calendar pills for other people (you can only log yourself) */
+.pill.readonly { cursor: default; pointer-events: none; }
+
+/* Read-only rows in the day sheet (other people) */
+.sp-status { font-size: 13px; font-weight: 700; color: var(--faint); }
+.sp-status.on { color: var(--good); }
+.sp-note-ro { color: var(--muted); font-size: 13px; margin-top: 8px; padding-left: 20px; border-left: 2px solid var(--border); }
+.sp-you { font-size: 10px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; background: rgba(255,255,255,0.07); padding: 1px 6px; border-radius: 999px; vertical-align: middle; }
+
+/* Leaderboard (3+ people) */
+.lb { display: flex; flex-direction: column; gap: 8px; }
+.lb-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); }
+.lb-row.me { border-color: var(--pc); box-shadow: inset 0 0 0 1px var(--pc); }
+.lb-rank { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 16px; width: 26px; color: var(--muted); }
+.lb-name { flex: 1; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.lb-name .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pc); box-shadow: 0 0 8px var(--pc); }
+.lb-bar { flex: 2; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.lb-bar i { display: block; height: 100%; background: var(--pc); border-radius: 999px; }
+.lb-n { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 16px; min-width: 20px; text-align: right; }
