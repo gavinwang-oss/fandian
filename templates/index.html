@@ -75,8 +75,9 @@
   <!-- Confetti canvas for goal celebrations -->
   <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
 
-  <!-- Jumpscare overlay (random) -->
-  <div id="jumpscare" class="jumpscare" hidden aria-hidden="true">
+  <!-- Random peek (subtle) — appears in a corner, dismiss with X -->
+  <div id="jumpscare" class="peek" hidden>
+    <button class="peek-close" id="peekClose" aria-label="Dismiss">✕</button>
     <img src="{{ url_for('static', filename='jumpscare.jpg') }}" alt="">
   </div>
 

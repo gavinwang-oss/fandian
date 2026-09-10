@@ -129,13 +129,18 @@ def current_user():
 
 @app.before_request
 def require_login():
-    # Public endpoints; everything else needs a session.
+    # Public endpoints; everything else needs a valid session.
     if request.endpoint in {"login", "static"}:
         return
-    if not session.get("uid"):
-        if request.path.startswith("/api/"):
-            return jsonify({"error": "auth required"}), 401
-        return redirect(url_for("login"))
+    # A logged-in session whose user still exists is fine. A missing or stale
+    # session (e.g. the user was removed, or the DB reset) bounces to login
+    # instead of 500-ing.
+    if session.get("uid") and current_user():
+        return
+    session.pop("uid", None)
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "auth required"}), 401
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])

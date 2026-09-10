@@ -611,9 +611,9 @@ document.getElementById("todayBtn").addEventListener("click", () => {
   renderAll();
 })();
 
-// ==================== JUMPSCARE ====================
-// Random full-screen scare using static/jumpscare.jpg, with a synthesized
-// scream. Does nothing if the image is missing.
+// ==================== RANDOM PEEK ====================
+// A small photo (static/jumpscare.jpg) quietly appears in a random corner every
+// so often. Dismiss it with the X. Does nothing if the image is missing.
 (function () {
   const el = document.getElementById("jumpscare");
   if (!el) return;
@@ -628,53 +628,29 @@ document.getElementById("todayBtn").addEventListener("click", () => {
     probe.src = src;
   }
 
-  // WebAudio scream — needs a user gesture first (browser autoplay policy).
-  let actx = null;
-  function initAudio() {
-    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
-    if (actx && actx.state === "suspended") actx.resume();
-  }
-  document.addEventListener("pointerdown", initAudio);
-  document.addEventListener("keydown", initAudio);
-
-  function scream() {
-    if (!actx) return;
-    const t = actx.currentTime, dur = 0.7;
-    // harsh noise burst
-    const n = actx.sampleRate * dur;
-    const buf = actx.createBuffer(1, n, actx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.4);
-    const noise = actx.createBufferSource(); noise.buffer = buf;
-    const ng = actx.createGain(); ng.gain.value = 0.4;
-    noise.connect(ng).connect(actx.destination);
-    // descending shriek
-    const osc = actx.createOscillator(); osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(920, t);
-    osc.frequency.exponentialRampToValueAtTime(110, t + dur);
-    const og = actx.createGain();
-    og.gain.setValueAtTime(0.35, t);
-    og.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.connect(og).connect(actx.destination);
-    noise.start(t); noise.stop(t + dur); osc.start(t); osc.stop(t + dur);
-  }
+  function hide() { el.hidden = true; }
 
   function fire() {
-    // Never show the overlay unless the image is genuinely loaded — otherwise
-    // it's just a black screen with a broken-image icon.
     const img = el.querySelector("img");
-    if (!ready || document.hidden || !img || !img.complete || img.naturalWidth === 0) return;
+    if (!ready || !img || !img.complete || img.naturalWidth === 0) return;
+    if (!el.hidden) return;   // already peeking — wait for dismiss
+
+    // Drop it into a random corner with a small margin.
+    const m = 20 + Math.round(Math.random() * 30);
+    el.style.top = el.style.bottom = el.style.left = el.style.right = "auto";
+    el.style[Math.random() < 0.5 ? "top" : "bottom"] = m + "px";
+    el.style[Math.random() < 0.5 ? "left" : "right"] = m + "px";
     el.hidden = false;
-    el.classList.add("active");
-    scream();
-    setTimeout(() => { el.classList.remove("active"); el.hidden = true; }, 950);
   }
 
   function schedule() {
-    // random gap: every ~25–75 seconds
-    const delay = 25000 + Math.random() * 50000;
+    const delay = 25000 + Math.random() * 50000;   // every ~25–75s
     setTimeout(() => { fire(); schedule(); }, delay);
   }
+
+  const closeBtn = document.getElementById("peekClose");
+  if (closeBtn) closeBtn.addEventListener("click", hide);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
 
   // expose for manual testing in the console
   window.__jumpscare = fire;
