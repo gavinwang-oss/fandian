@@ -128,13 +128,15 @@ def migrate():
         except Exception:
             pass
 
-    # Remove throwaway players created by deploy smoke-tests.
+    # Remove throwaway players created by deploy smoke-tests. Pass the LIKE
+    # pattern as a parameter — a literal '%' inline in the SQL is misread by the
+    # Postgres driver.
     try:
-        ids = query("SELECT id FROM users WHERE username LIKE 'deploytest\\_%' ESCAPE '\\'",
-                    fetch="all") or []
+        pattern = "deploytest%"
+        ids = query("SELECT id FROM users WHERE username LIKE ?", (pattern,), fetch="all") or []
         for row in ids:
             query("DELETE FROM workouts WHERE person=?", (str(row["id"]),))
-        query("DELETE FROM users WHERE username LIKE 'deploytest\\_%' ESCAPE '\\'")
+        query("DELETE FROM users WHERE username LIKE ?", (pattern,))
     except Exception:
         pass
 
